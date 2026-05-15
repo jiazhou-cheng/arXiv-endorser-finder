@@ -258,14 +258,12 @@ function showError(message) {
 
 function clearOutput() {
   results.innerHTML = "";
-  summary.innerHTML = "";
-  summary.classList.add("hidden");
 }
 
 function setLoading(isLoading) {
   progress.classList.toggle("hidden", !isLoading);
   submitButton.disabled = isLoading;
-  submitButton.textContent = isLoading ? "Searching..." : "Find candidates";
+  submitButton.textContent = isLoading ? "Searching..." : "Find";
 }
 
 function escapeHtml(value) {
