@@ -355,6 +355,8 @@ async function findPotentialEndorsers(input) {
 }
 
 function isArxivRateLimited() {
+  // If rate limiting is disabled, never report as limited
+  if (!rateLimitEnabled) return false;
   return Date.now() < arxivRateLimitedUntil;
 }
 
@@ -459,18 +461,26 @@ async function cachedFetchText(url, namespace) {
       }
     });
     if (!response.ok) {
-if (response.status === 429) {
-  const retryAfter = response.headers.get("retry-after") || "";
-  const cooldownMs = handleRateLimitHit(retryAfter);
-  const status = getRateLimitStatus();
-  const error = new Error(
-    `arXiv is rate-limiting requests. Please wait ${status.remainingSeconds} seconds and try again. Cached results will still be reused. (Backoff: ${status.backoffMultiplier}x)`
-  );
-  error.statusCode = response.status;
-  error.url = url;
-  error.retryAfter = retryAfter;
-  error.cooldownMs = cooldownMs;
-  throw error;
+  if (response.status === 429) {
+    // If rate limiting is enabled, apply backoff; otherwise just retry after a short delay
+    if (rateLimitEnabled) {
+      const retryAfter = response.headers.get("retry-after") || "";
+      const cooldownMs = handleRateLimitHit(retryAfter);
+      const status = getRateLimitStatus();
+      const error = new Error(
+        `arXiv is rate-limiting requests. Please wait ${status.remainingSeconds} seconds and try again. Cached results will still be reused.`
+      );
+      error.statusCode = response.status;
+      error.url = url;
+      error.retryAfter = retryAfter;
+      error.cooldownMs = cooldownMs;
+      throw error;
+    }
+    // Rate limiting disabled - just throw a simple error without blocking
+    const error = new Error("arXiv returned 429. Retrying may help.");
+    error.statusCode = response.status;
+    error.url = url;
+    throw error;
   }
       const error = new Error(`arXiv request failed (${response.status}) for ${url}`);
       error.statusCode = response.status;
