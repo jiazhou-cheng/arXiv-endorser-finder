@@ -14,15 +14,14 @@ const USER_AGENT =
 const ARXIV_API = "https://export.arxiv.org/api/query";
 const ARXIV_ORIGIN = "https://arxiv.org";
 
-// Rate limiting configuration
+// Rate limiting configuration - arXiv recommends 3 second delay between requests
 const RATE_LIMIT_CONFIG = {
-  minDelayMs: Number(process.env.ARXIV_MIN_DELAY_MS) || 5000,        // Minimum delay between requests (5 seconds default)
-  maxDelayMs: Number(process.env.ARXIV_MAX_DELAY_MS) || 30000,       // Maximum delay for exponential backoff
-  baseBackoffMs: Number(process.env.ARXIV_BASE_BACKOFF_MS) || 10000, // Base backoff on rate limit hit
-  defaultCooldownMs: 10 * 60 * 1000,                                  // Default cooldown when rate limited (10 minutes)
+  minDelayMs: Number(process.env.ARXIV_MIN_DELAY_MS) || 3500,        // Minimum delay between requests (3.5 seconds)
+  maxDelayMs: Number(process.env.ARXIV_MAX_DELAY_MS) || 10000,       // Maximum delay for exponential backoff (10 seconds)
+  defaultCooldownMs: 30 * 1000,                                       // Default cooldown when rate limited (30 seconds, not 10 minutes!)
   maxRetries: 3,                                                      // Max retries per request
-  burstLimit: 5,                                                      // Max requests before forced cooldown
-  burstCooldownMs: 60000,                                             // Cooldown after burst limit (1 minute)
+  burstLimit: 10,                                                     // Max requests before forced cooldown
+  burstCooldownMs: 15000,                                             // Cooldown after burst limit (15 seconds)
 };
 
 const API_PAGE_SIZE = 100;
@@ -392,9 +391,11 @@ function resetBurstCounterIfNeeded() {
 }
 
 function handleRateLimitHit(retryAfter) {
-  currentBackoffMultiplier = Math.min(currentBackoffMultiplier * 2, 4); // Max 4x backoff
+  currentBackoffMultiplier = Math.min(currentBackoffMultiplier + 0.5, 2); // Max 2x backoff, increment slowly
   const baseDelay = RATE_LIMIT_CONFIG.defaultCooldownMs;
-  const delay = getRetryDelayMs({ retryAfter }, baseDelay * currentBackoffMultiplier);
+  // Cap the maximum delay at 2 minutes regardless of backoff
+  const maxCooldown = 2 * 60 * 1000; // 2 minutes max
+  const delay = Math.min(getRetryDelayMs({ retryAfter }, baseDelay * currentBackoffMultiplier), maxCooldown);
   arxivRateLimitedUntil = Date.now() + delay;
   console.log(`[Rate Limit] Hit rate limit. Cooling down for ${Math.ceil(delay / 1000)} seconds. Backoff multiplier: ${currentBackoffMultiplier}x`);
   return delay;
