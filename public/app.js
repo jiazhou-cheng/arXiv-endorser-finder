@@ -13,7 +13,6 @@ const resetRateLimitButton = document.querySelector("#reset-rate-limit");
 const categoryInfo = document.querySelector("#category-info");
 const categoryInfoContent = document.querySelector("#category-info-content");
 const categoryInfoLoading = document.querySelector("#category-info-loading");
-const categoryInfoTitle = document.querySelector("#category-info-title");
 
 let categories = [];
 let rateLimitInterval = null;
@@ -88,7 +87,6 @@ async function fetchCategoryInfo(category) {
   categoryInfo.classList.remove("hidden");
   categoryInfoLoading.classList.remove("hidden");
   categoryInfoContent.innerHTML = "";
-  categoryInfoTitle.textContent = `Category: ${category}`;
   
   try {
     const response = await fetch(`/api/category-info?category=${encodeURIComponent(category)}`);
@@ -117,10 +115,9 @@ function renderCategoryInfo(data) {
       </div>
       <div class="category-info-item">
         <span class="category-info-label">Papers required</span>
-        <span class="category-info-value">${data.papersRequired}+ papers <small class="muted">(estimated)</small></span>
+        <span class="category-info-value"><a href="${escapeHtml(data.verifyUrl)}" target="_blank" rel="noopener">Login to arXiv</a></span>
       </div>
     </div>
-    <p class="category-info-note muted">${escapeHtml(data.papersRequiredNote)}</p>
   `;
 }
 
