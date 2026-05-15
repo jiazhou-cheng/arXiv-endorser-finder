@@ -760,7 +760,9 @@ function formatArxivDate(date) {
 function parseArxivFeed(xml) {
   return getTagBlocks(xml, "entry").map((entry) => {
     const idUrl = getTag(entry, "id");
-    const arxivId = idUrl.split("/abs/").pop() || idUrl;
+    const rawArxivId = idUrl.split("/abs/").pop() || idUrl;
+    // Remove version suffix (e.g., "2401.12345v1" -> "2401.12345") to always link to latest version
+    const arxivId = rawArxivId.replace(/v\d+$/, "");
     const categories = [...entry.matchAll(/<category[^>]*term=["']([^"']+)["'][^>]*>/gi)].map((m) =>
       decodeHtml(m[1])
     );
