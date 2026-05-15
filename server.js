@@ -751,25 +751,25 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const piConnection = getPiConnection(candidate.name, piName, piCoauthors);
       
       // Core eligibility criteria based on arXiv endorser requirements:
-      // 1. Endorsement Domain: Must have papers in the exact target category
-      // 2. Recent Window: Papers must be within 3 months to 5 years
+      // 1. PI Connection: Most important - you need someone you know who can endorse
+      // 2. Endorsement Domain: Must have papers in the exact target category
+      // 3. Recent Window: Papers must be within 3 months to 5 years
       const endorsementEligibility = checkEndorsementEligibility(targetAppearances, targetCategory);
       
-      // Scoring weights - endorsement eligibility is now the primary factor
-      const endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 50 : 0;
-      const recentWindowScore = endorsementEligibility.inRecentWindow ? 40 : 0;
+      // Scoring weights - PI connection is the most important factor
+      // Level 1 = direct PI coauthor, Level 2 = PI's coauthor's coauthor
+      const piScore = piConnection.level === 1 ? 50 : piConnection.level === 2 ? 25 : 0;
+      const endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 30 : 0;
+      const recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
       
-      // Secondary factors
-      const authorPositionScore = getAuthorPositionScore(bestAppearance.position);
-      const piScore = piConnection.level === 1 ? 20 : piConnection.level === 2 ? 8 : 0;
-      const institutionScore = candidate.institutionEvidence ? 15 : 0;
-      const repeatedActivityScore = Math.min(Math.max(0, targetAppearances.length - 1) * 5, 20);
+      // Minor factors
+      const institutionScore = candidate.institutionEvidence ? 10 : 0;
+      const repeatedActivityScore = Math.min(targetAppearances.length * 3, 15);
       
       const totalScore =
+        piScore +
         endorsementDomainScore +
         recentWindowScore +
-        authorPositionScore +
-        piScore +
         institutionScore +
         repeatedActivityScore;
 
@@ -811,12 +811,11 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         },
         scores: {
           total: totalScore,
+          piConnection: piScore,
           endorsementDomain: endorsementDomainScore,
           recentWindow: recentWindowScore,
-          piConnection: piScore,
           institution: institutionScore,
-          repeatedActivity: repeatedActivityScore,
-          authorPosition: authorPositionScore
+          repeatedActivity: repeatedActivityScore
         },
         rankingReason: relevance.join(" "),
         manualCheckInstruction:

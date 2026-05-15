@@ -225,59 +225,34 @@ function getEmptyMessage(data, noFocusedPapers) {
 }
 
 function renderCandidate(candidate) {
-  const score = Math.round(candidate.scores.total);
   const eligibility = candidate.endorsementEligibility || {};
-  const isEligible = eligibility.isEligible;
-  const eligibilityClass = isEligible ? "pill eligible" : "pill not-eligible";
-  const eligibilityText = isEligible ? "Likely Eligible" : "May Not Be Eligible";
+  const paperCount = eligibility.eligiblePaperCount || candidate.paperCount || 0;
+  const connectionText = candidate.piConnection || "No direct connection";
+  
+  // Build endorser check URL from arXiv paper ID
+  const arxivId = candidate.sourcePaper;
+  const endorserCheckUrl = `https://arxiv.org/auth/show-endorsers/${arxivId}`;
   
   return `
-    <article class="result-card ${isEligible ? "" : "low-confidence"}">
+    <article class="result-card">
       <div class="result-head">
-        <div>
-          <h3>${escapeHtml(candidate.name)}</h3>
-          <p class="muted">${escapeHtml(candidate.confidence)} · ${escapeHtml(candidate.affiliation)}</p>
+        <h3>${escapeHtml(candidate.name)}</h3>
+      </div>
+
+      <div class="candidate-info">
+        <div class="info-item">
+          <span class="info-label">Connection</span>
+          <span class="info-value">${escapeHtml(connectionText)}</span>
         </div>
-        <div class="score" aria-label="Ranking score">
-          <span>Score</span>
-          <b>${score}</b>
+        <div class="info-item">
+          <span class="info-label">Papers in category</span>
+          <span class="info-value">${paperCount}</span>
         </div>
       </div>
 
-      <div class="eligibility-status">
-        <span class="${eligibilityClass}">${eligibilityText}</span>
-        <span class="eligibility-detail">
-          ${eligibility.hasTargetCategory ? "Has target category" : "No target category"} · 
-          ${eligibility.inRecentWindow ? "In recent window" : "Outside recent window"}
-          ${eligibility.eligiblePaperCount ? ` · ${eligibility.eligiblePaperCount} eligible paper(s)` : ""}
-        </span>
-      </div>
-
-      <div class="meta-row">
-        <span class="pill">${escapeHtml(candidate.sourceCategory)}</span>
-        <span class="pill">${escapeHtml(candidate.authorRole)}</span>
-        <span class="pill">${candidate.paperCount} paper${candidate.paperCount === 1 ? "" : "s"}</span>
-        ${candidate.piConnection ? `<span class="pill strong">PI network</span>` : ""}
-      </div>
-
-      <p>${escapeHtml(candidate.rankingReason)}</p>
-
-      <div class="score-row">
-        <span class="pill ${eligibility.hasTargetCategory ? "score-high" : ""}">Domain ${candidate.scores.endorsementDomain}</span>
-        <span class="pill ${eligibility.inRecentWindow ? "score-high" : ""}">Window ${candidate.scores.recentWindow}</span>
-        <span class="pill">PI ${candidate.scores.piConnection}</span>
-        <span class="pill">Institution ${candidate.scores.institution}</span>
-        <span class="pill">Activity ${candidate.scores.repeatedActivity}</span>
-        <span class="pill">Position ${candidate.scores.authorPosition}</span>
-      </div>
-
-      <div class="evidence">
-        <div><strong>Endorsement eligibility:</strong> ${isEligible ? "Likely eligible based on category and publication date." : "May not be eligible. Verify on arXiv."}</div>
-        <div><strong>Recent arXiv paper:</strong> ${escapeHtml(candidate.sourcePaper)} · ${escapeHtml(candidate.sourceTitle)}</div>
-        <div><strong>Manual check:</strong> ${escapeHtml(candidate.manualCheckInstruction)}</div>
-        <div>
-          <a href="${candidate.abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
-        </div>
+      <div class="candidate-links">
+        <a href="${candidate.abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
+        <a href="${endorserCheckUrl}" target="_blank" rel="noreferrer">Check endorsement eligibility</a>
       </div>
     </article>
   `;
