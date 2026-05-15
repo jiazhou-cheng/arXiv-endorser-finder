@@ -14,15 +14,8 @@ const USER_AGENT =
 const ARXIV_API = "https://export.arxiv.org/api/query";
 const ARXIV_ORIGIN = "https://arxiv.org";
 
-// Rate limiting configuration - arXiv recommends 3 second delay between requests
-const RATE_LIMIT_CONFIG = {
-  minDelayMs: Number(process.env.ARXIV_MIN_DELAY_MS) || 3500,        // Minimum delay between requests (3.5 seconds)
-  maxDelayMs: Number(process.env.ARXIV_MAX_DELAY_MS) || 10000,       // Maximum delay for exponential backoff (10 seconds)
-  defaultCooldownMs: 30 * 1000,                                       // Default cooldown when rate limited (30 seconds, not 10 minutes!)
-  maxRetries: 3,                                                      // Max retries per request
-  burstLimit: 10,                                                     // Max requests before forced cooldown
-  burstCooldownMs: 15000,                                             // Cooldown after burst limit (15 seconds)
-};
+// Simple rate limiting like v1 - just a minimum delay between requests
+const RATE_LIMIT_MS = 3100; // 3.1 seconds between requests when enabled
 
 const API_PAGE_SIZE = 100;
 const DEFAULT_PAPER_LIMIT = 100;
@@ -32,10 +25,6 @@ const RECENT_YEARS = 5;
 // Rate limiting state
 let rateLimitEnabled = false; // OFF by default
 let lastArxivRequestAt = 0;
-let arxivRateLimitedUntil = 0;
-let consecutiveRequests = 0;
-let lastBurstResetAt = Date.now();
-let currentBackoffMultiplier = 1;
 
 const ARXIV_CATEGORIES = [
   "astro-ph.CO",
@@ -354,48 +343,10 @@ async function findPotentialEndorsers(input) {
   };
 }
 
-function isArxivRateLimited() {
-  // If rate limiting is disabled, never report as limited
-  if (!rateLimitEnabled) return false;
-  return Date.now() < arxivRateLimitedUntil;
-}
-
 function getRateLimitStatus() {
-  const now = Date.now();
-  const isLimited = rateLimitEnabled && now < arxivRateLimitedUntil;
-  const remainingMs = isLimited ? arxivRateLimitedUntil - now : 0;
-  
   return {
-    enabled: rateLimitEnabled,
-    isLimited,
-    remainingMs,
-    remainingSeconds: Math.ceil(remainingMs / 1000),
+    enabled: rateLimitEnabled
   };
-}
-
-function getCurrentDelay() {
-  const baseDelay = RATE_LIMIT_CONFIG.minDelayMs * currentBackoffMultiplier;
-  return Math.min(baseDelay, RATE_LIMIT_CONFIG.maxDelayMs);
-}
-
-function resetBurstCounterIfNeeded() {
-  const now = Date.now();
-  if (now - lastBurstResetAt > RATE_LIMIT_CONFIG.burstCooldownMs) {
-    consecutiveRequests = 0;
-    lastBurstResetAt = now;
-    currentBackoffMultiplier = Math.max(1, currentBackoffMultiplier * 0.5); // Gradually reduce backoff
-  }
-}
-
-function handleRateLimitHit(retryAfter) {
-  currentBackoffMultiplier = Math.min(currentBackoffMultiplier + 0.5, 2); // Max 2x backoff, increment slowly
-  const baseDelay = RATE_LIMIT_CONFIG.defaultCooldownMs;
-  // Cap the maximum delay at 2 minutes regardless of backoff
-  const maxCooldown = 2 * 60 * 1000; // 2 minutes max
-  const delay = Math.min(getRetryDelayMs({ retryAfter }, baseDelay * currentBackoffMultiplier), maxCooldown);
-  arxivRateLimitedUntil = Date.now() + delay;
-  console.log(`[Rate Limit] Hit rate limit. Cooling down for ${Math.ceil(delay / 1000)} seconds. Backoff multiplier: ${currentBackoffMultiplier}x`);
-  return delay;
 }
 
 async function searchArxiv({ query, maxResults }) {
@@ -445,14 +396,6 @@ async function cachedFetchText(url, namespace) {
   try {
     return await readFile(cachePath, "utf8");
   } catch {
-    if (isArxivRateLimited()) {
-      const error = new Error(
-        "arXiv is rate-limiting requests right now. Please wait a few minutes and try again; cached results will still be reused."
-      );
-      error.statusCode = 429;
-      throw error;
-    }
-
     await waitForArxivRateLimit();
     const response = await fetch(url, {
       headers: {
@@ -462,22 +405,9 @@ async function cachedFetchText(url, namespace) {
     });
     if (!response.ok) {
   if (response.status === 429) {
-    // If rate limiting is enabled, apply backoff; otherwise just retry after a short delay
-    if (rateLimitEnabled) {
-      const retryAfter = response.headers.get("retry-after") || "";
-      const cooldownMs = handleRateLimitHit(retryAfter);
-      const status = getRateLimitStatus();
-      const error = new Error(
-        `arXiv is rate-limiting requests. Please wait ${status.remainingSeconds} seconds and try again. Cached results will still be reused.`
-      );
-      error.statusCode = response.status;
-      error.url = url;
-      error.retryAfter = retryAfter;
-      error.cooldownMs = cooldownMs;
-      throw error;
-    }
-    // Rate limiting disabled - just throw a simple error without blocking
-    const error = new Error("arXiv returned 429. Retrying may help.");
+    const error = new Error(
+      "arXiv is rate-limiting requests right now. Please wait a few minutes and try again; cached results will still be reused."
+    );
     error.statusCode = response.status;
     error.url = url;
     throw error;
@@ -493,17 +423,6 @@ async function cachedFetchText(url, namespace) {
   }
 }
 
-function getRetryDelayMs(error, fallbackMs) {
-  const retryAfter = String(error.retryAfter || "").trim();
-  if (/^\d+$/.test(retryAfter)) {
-    return Math.max(Number(retryAfter) * 1000, fallbackMs);
-  }
-  const retryDate = Date.parse(retryAfter);
-  if (Number.isFinite(retryDate)) {
-    return Math.max(retryDate - Date.now(), fallbackMs);
-  }
-  return fallbackMs;
-}
 
 function assertAllowedUrl(url) {
   const parsed = new URL(url);
@@ -515,33 +434,17 @@ function assertAllowedUrl(url) {
 }
 
 async function waitForArxivRateLimit() {
-  // Skip rate limiting if disabled
+  // Skip rate limiting if disabled (v1 behavior - no delay)
   if (!rateLimitEnabled) {
     return;
   }
   
-  resetBurstCounterIfNeeded();
-  
-  // Check burst limit
-  if (consecutiveRequests >= RATE_LIMIT_CONFIG.burstLimit) {
-    const burstWait = RATE_LIMIT_CONFIG.burstCooldownMs;
-    console.log(`[Rate Limit] Burst limit reached (${consecutiveRequests} requests). Waiting ${burstWait / 1000}s...`);
-    await new Promise((resolve) => setTimeout(resolve, burstWait));
-    consecutiveRequests = 0;
-    lastBurstResetAt = Date.now();
-  }
-  
-  const currentDelay = getCurrentDelay();
+  // Simple v1-style rate limiting: just wait if needed
   const elapsed = Date.now() - lastArxivRequestAt;
-  
-  if (elapsed < currentDelay) {
-    const waitTime = currentDelay - elapsed;
-    console.log(`[Rate Limit] Waiting ${Math.ceil(waitTime / 1000)}s before next request (delay: ${currentDelay}ms, backoff: ${currentBackoffMultiplier}x)`);
-    await new Promise((resolve) => setTimeout(resolve, waitTime));
+  if (elapsed < RATE_LIMIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
   }
-  
   lastArxivRequestAt = Date.now();
-  consecutiveRequests++;
 }
 
 function rankPotentialCandidates({ papers, paperGroups, targetCategory, piName, piCoauthors }) {
