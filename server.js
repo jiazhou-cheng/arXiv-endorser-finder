@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT, "public");
-const CACHE_DIR = join(ROOT, ".cache");
+// Use /tmp for cache in serverless environments (Vercel), fallback to local .cache for development
+const CACHE_DIR = process.env.VERCEL ? "/tmp/.cache" : join(ROOT, ".cache");
 const PORT = Number(process.env.PORT || 3000);
 const USER_AGENT =
   "arXivEndorserFinder/0.1 (responsible crawler; contact: local-development)";
