@@ -758,7 +758,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       
       // Scoring weights - PI connection is the most important factor
       // Level 1 = direct PI coauthor, Level 2 = PI's coauthor's coauthor
-      const piScore = piConnection.level === 1 ? 50 : piConnection.level === 2 ? 25 : 0;
+      const piScore = piConnection.level === 1 ? 25 : piConnection.level === 2 ? 15 : 0;
       const endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 30 : 0;
       const recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
       
