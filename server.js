@@ -233,15 +233,6 @@ createServer(async (req, res) => {
       return sendJson(res, { message: "Rate limit state reset", status: getRateLimitStatus() });
     }
 
-    if (req.method === "GET" && url.pathname === "/api/category-info") {
-      const category = url.searchParams.get("category");
-      if (!category || !CATEGORY_SET.has(category)) {
-        return sendJson(res, { error: "Invalid category" }, 400);
-      }
-      const info = await fetchCategoryEndorsementInfo(category);
-      return sendJson(res, info);
-    }
-
     if (req.method === "POST" && url.pathname === "/api/search") {
       const payload = await readJson(req);
       const results = await findPotentialEndorsers(payload);
@@ -265,214 +256,6 @@ createServer(async (req, res) => {
   console.log(`arXivEndorserFinder running at http://localhost:${PORT}`);
 });
 
-// Cache for category endorsement info
-const categoryEndorsementCache = new Map();
-const ENDORSEMENT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-
-async function fetchCategoryEndorsementInfo(category) {
-  // Check cache first
-  const cached = categoryEndorsementCache.get(category);
-  if (cached && Date.now() - cached.fetchedAt < ENDORSEMENT_CACHE_TTL) {
-    return cached.data;
-  }
-
-  // Endorsement domains are per-subcategory (e.g., cs.AI, cs.CV, physics.optics)
-  // The full category is the endorsement domain
-  const archivePart = category.split(".")[0];
-  const endorsementDomain = category;
-  
-  // Try to fetch endorsement requirements from arXiv
-  // Note: The actual paper count requirements are only visible when logged in
-  // We provide the known structure based on arXiv documentation
-  const info = {
-    category,
-    endorsementDomain,
-    recentWindow: "3 months - 5 years",
-    description: getEndorsementDomainDescription(archivePart),
-    // Paper requirements vary by domain and are only shown to logged-in users
-    // We indicate this and encourage manual verification
-    papersRequired: getEstimatedPapersRequired(archivePart),
-    papersRequiredNote: "Exact requirement varies. Log in to arXiv for precise count.",
-    verifyUrl: `https://arxiv.org/auth/endorse-status?category=${encodeURIComponent(category)}`,
-  };
-
-  categoryEndorsementCache.set(category, { data: info, fetchedAt: Date.now() });
-  return info;
-}
-
-function getEndorsementDomainDescription(archive) {
-  const descriptions = {
-    "astro-ph": "Astrophysics",
-    "cond-mat": "Condensed Matter",
-    "cs": "Computer Science",
-    "econ": "Economics",
-    "eess": "Electrical Engineering and Systems Science",
-    "gr-qc": "General Relativity and Quantum Cosmology",
-    "hep-ex": "High Energy Physics - Experiment",
-    "hep-lat": "High Energy Physics - Lattice",
-    "hep-ph": "High Energy Physics - Phenomenology",
-    "hep-th": "High Energy Physics - Theory",
-    "math": "Mathematics",
-    "math-ph": "Mathematical Physics",
-    "nlin": "Nonlinear Sciences",
-    "nucl-ex": "Nuclear Experiment",
-    "nucl-th": "Nuclear Theory",
-    "physics": "Physics (individual subject classes)",
-    "q-bio": "Quantitative Biology",
-    "q-fin": "Quantitative Finance",
-    "quant-ph": "Quantum Physics",
-    "stat": "Statistics",
-  };
-  return descriptions[archive] || archive;
-}
-
-function getEstimatedPapersRequired(archive) {
-  // These are estimated based on arXiv documentation mentioning 
-  // "any active scientist who has been working in their field for a few years"
-  // Actual values may vary and should be verified via login
-  const estimates = {
-    "hep-th": 1,
-    "hep-ph": 1,
-    "hep-lat": 1,
-    "hep-ex": 1,
-    "gr-qc": 1,
-    "quant-ph": 1,
-    "nucl-th": 1,
-    "nucl-ex": 1,
-    "math-ph": 1,
-    "astro-ph": 1,
-    "cond-mat": 1,
-    "cs": 3,
-    "math": 3,
-    "stat": 3,
-    "q-bio": 3,
-    "q-fin": 3,
-    "econ": 3,
-    "eess": 3,
-    "nlin": 3,
-    "physics": 3,
-  };
-  return estimates[archive] || 3;
-}
-
-// Common institution name mappings and abbreviations
-const INSTITUTION_ALIASES = {
-  "stanford": ["Stanford University", "Stanford", "Stanford CS"],
-  "mit": ["Massachusetts Institute of Technology", "MIT", "CSAIL"],
-  "berkeley": ["UC Berkeley", "University of California, Berkeley", "Berkeley"],
-  "cmu": ["Carnegie Mellon University", "CMU", "Carnegie Mellon"],
-  "harvard": ["Harvard University", "Harvard"],
-  "princeton": ["Princeton University", "Princeton"],
-  "caltech": ["California Institute of Technology", "Caltech"],
-  "cornell": ["Cornell University", "Cornell"],
-  "ucla": ["UCLA", "University of California, Los Angeles"],
-  "ucsd": ["UCSD", "University of California, San Diego"],
-  "uw": ["University of Washington", "UW Seattle"],
-  "gatech": ["Georgia Tech", "Georgia Institute of Technology"],
-  "uiuc": ["UIUC", "University of Illinois at Urbana-Champaign", "University of Illinois"],
-  "umich": ["University of Michigan", "UMich", "Michigan"],
-  "nyu": ["New York University", "NYU"],
-  "columbia": ["Columbia University", "Columbia"],
-  "yale": ["Yale University", "Yale"],
-  "eth": ["ETH Zurich", "ETH", "Swiss Federal Institute of Technology"],
-  "oxford": ["University of Oxford", "Oxford"],
-  "cambridge": ["University of Cambridge", "Cambridge"],
-  "google": ["Google", "Google Research", "Google DeepMind", "DeepMind"],
-  "meta": ["Meta", "Meta AI", "Facebook AI", "FAIR"],
-  "microsoft": ["Microsoft", "Microsoft Research", "MSR"],
-  "openai": ["OpenAI"],
-  "anthropic": ["Anthropic"],
-};
-
-function getInstitutionVariations(institution) {
-  const normalizedInput = institution.toLowerCase().trim();
-  const variations = [institution]; // Always include original
-  
-  // Check if input matches any known alias
-  for (const [key, aliases] of Object.entries(INSTITUTION_ALIASES)) {
-    const allForms = [key, ...aliases.map(a => a.toLowerCase())];
-    if (allForms.some(form => normalizedInput.includes(form) || form.includes(normalizedInput))) {
-      for (const alias of aliases) {
-        if (!variations.includes(alias)) {
-          variations.push(alias);
-        }
-      }
-    }
-  }
-  
-  // If no aliases found, try some heuristics
-  if (variations.length === 1) {
-    // Add "University of X" if just "X" is given
-    if (!normalizedInput.includes("university")) {
-      variations.push(`University of ${institution}`);
-      variations.push(`${institution} University`);
-    }
-  }
-  
-  return variations;
-}
-
-// Find researchers from an institution who publish in a target category
-// Strategy: Search arXiv for papers with institution name in affiliation/abstract,
-// then extract the most frequent authors
-async function findInstitutionResearchers(institution, targetCategory, recentRange, maxResults) {
-  const researchers = [];
-  const authorCounts = new Map();
-  
-  // Generate institution name variations for better matching
-  const institutionVariations = getInstitutionVariations(institution);
-  
-  // Search for papers that mention the institution in the target category
-  // arXiv doesn't have a direct affiliation field, so we search in all text
-  const queries = [];
-  
-  // Add queries for each variation
-  for (const variation of institutionVariations.slice(0, 3)) {
-    queries.push(`cat:${targetCategory} AND all:"${escapeQuery(variation)}" AND ${recentRange}`);
-  }
-  
-  for (const query of queries) {
-    try {
-      const papers = await searchArxiv({
-        query,
-        maxResults: Math.min(maxResults, 150)
-      });
-      
-      // Count author appearances
-      for (const paper of papers) {
-        // Check if this paper is likely from the institution
-        const hasInstitutionEvidence = getInstitutionEvidence(paper, institution);
-        if (hasInstitutionEvidence) {
-          for (const author of paper.authors) {
-            const key = normalizeName(author);
-            if (key) {
-              authorCounts.set(key, (authorCounts.get(key) || 0) + 1);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.log(`[Institution Search] Query failed: ${error.message}`);
-    }
-  }
-  
-  // Sort by paper count and get top researchers
-  const sortedAuthors = [...authorCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20);
-  
-  for (const [name, count] of sortedAuthors) {
-    researchers.push(name);
-  }
-  
-  console.log(`[Institution Search] Found ${researchers.length} researchers from ${institution} in ${targetCategory}`);
-  
-  return {
-    researchers,
-    authorCounts: Object.fromEntries(sortedAuthors)
-  };
-}
-
 async function findPotentialEndorsers(input) {
   const targetCategory = String(input.targetCategory || "").trim();
   const connection = cleanOptional(input.connection);
@@ -494,26 +277,6 @@ async function findPotentialEndorsers(input) {
   let piCoauthors = new Set();
 
   if (institution) {
-    // Strategy 1: Search for faculty/researchers from the institution in this category
-    // Use arXiv author search with institution affiliation patterns
-    const institutionFaculty = await findInstitutionResearchers(institution, targetCategory, recentRange, maxResults);
-    
-    if (institutionFaculty.researchers.length > 0) {
-      // Search for papers by these researchers in the target category
-      const facultyQuery = buildCategoryAuthorOrQuery(targetCategory, institutionFaculty.researchers.slice(0, 15), recentRange);
-      if (facultyQuery) {
-        paperGroups.push({
-          type: "institution-faculty",
-          label: `Researchers from ${institution} in ${targetCategory}`,
-          papers: await searchArxiv({
-            query: facultyQuery,
-            maxResults: Math.min(maxResults, 200)
-          })
-        });
-      }
-    }
-    
-    // Strategy 2: Also do text match as fallback
     const institutionQuery = buildCategoryKeywordQuery(targetCategory, institution, recentRange);
     if (institutionQuery) {
       paperGroups.push({
@@ -521,7 +284,7 @@ async function findPotentialEndorsers(input) {
         label: `Institution text match: ${institution}`,
         papers: await searchArxiv({
           query: institutionQuery,
-          maxResults: Math.min(maxResults, 100)
+          maxResults
         })
       });
     }
@@ -592,14 +355,13 @@ async function findPotentialEndorsers(input) {
   return {
     targetCategory,
     recentYears: RECENT_YEARS,
-  searchStrategy: {
-  focusedSearch,
-  searchMode: institution && !piName ? "institution" : piName ? "person" : "category",
-  connection,
-  connectionCategory,
-  connectionType,
-  institution,
-  piName,
+    searchStrategy: {
+      focusedSearch,
+      connection,
+      connectionCategory,
+      connectionType,
+      institution,
+      piName,
       groups: paperGroups.map((group) => ({
         label: group.label,
         count: group.papers.length
@@ -847,7 +609,6 @@ async function waitForArxivRateLimit() {
 function rankPotentialCandidates({ papers, paperGroups, targetCategory, institution, piName, piCoauthors }) {
   const byName = new Map();
   const paperSignals = buildPaperSignals(paperGroups);
-  const isInstitutionMode = Boolean(institution && !piName);
 
   for (const paper of papers) {
     const signals = paperSignals.get(normalizeArxivId(paper.arxivId)) || new Set(["category"]);
@@ -889,50 +650,19 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const sourcePaper = bestAppearance.paper;
       const exactCategory = candidate.categories.has(targetCategory);
       const piConnection = getPiConnection(candidate.name, piName, piCoauthors);
-      
-      // Core eligibility criteria based on arXiv endorser requirements:
-      // 1. Endorsement Domain: Must have papers in the exact target category
-      // 2. Recent Window: Papers must be within 3 months to 5 years
-      // 3. For person mode: PI Connection is most important
-      // 4. For institution mode: Paper count in target category is most important
-      const endorsementEligibility = checkEndorsementEligibility(targetAppearances, targetCategory);
-      
-      let totalScore;
-      let piScore = 0;
-      let endorsementDomainScore = 0;
-      let recentWindowScore = 0;
-      let institutionScore = 0;
-      let paperCountScore = 0;
-      
-      if (isInstitutionMode) {
-        // Institution mode: prioritize people who published most in target category within recent window
-        endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 20 : 0;
-        recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
-        institutionScore = candidate.institutionEvidence ? 10 : 0;
-        // Paper count is the most important factor - more papers = higher score
-        paperCountScore = Math.min(endorsementEligibility.eligiblePaperCount * 10, 50);
-        
-        totalScore =
-          paperCountScore +
-          endorsementDomainScore +
-          recentWindowScore +
-          institutionScore;
-      } else {
-        // Person mode: PI connection is the most important factor
-        // Level 1 = direct PI coauthor, Level 2 = PI's coauthor's coauthor
-        piScore = piConnection.level === 1 ? 50 : piConnection.level === 2 ? 25 : 0;
-        endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 30 : 0;
-        recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
-        institutionScore = candidate.institutionEvidence ? 10 : 0;
-        paperCountScore = Math.min(endorsementEligibility.eligiblePaperCount * 3, 15);
-        
-        totalScore =
-          piScore +
-          endorsementDomainScore +
-          recentWindowScore +
-          institutionScore +
-          paperCountScore;
-      }
+      const authorPositionScore = getAuthorPositionScore(bestAppearance.position);
+      const categoryScore = exactCategory ? 20 : 0;
+      const recentPaperScore = getRecentPaperPointScore(sourcePaper.publishedAt);
+      const piScore = piConnection.level === 1 ? 30 : piConnection.level === 2 ? 10 : 0;
+      const institutionScore = candidate.institutionEvidence ? 25 : 0;
+      const repeatedActivityScore = Math.max(0, targetAppearances.length - 1) * 10;
+      const totalScore =
+        categoryScore +
+        recentPaperScore +
+        authorPositionScore +
+        piScore +
+        institutionScore +
+        repeatedActivityScore;
 
       const relevance = buildRelevanceReasons({
         candidate,
@@ -941,8 +671,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         piConnection,
         exactCategory,
         bestAppearance,
-        targetPaperCount: targetAppearances.length,
-        endorsementEligibility
+        targetPaperCount: targetAppearances.length
       });
 
       return {
@@ -954,7 +683,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         categories: [...candidate.categories],
         publishedAt: sourcePaper.publishedAt,
         abstractUrl: sourcePaper.absUrl,
-        potentialEndorser: endorsementEligibility.isEligible,
+        potentialEndorser: true,
         categoryMatch: exactCategory,
         confidence: getConfidenceLabel(bestAppearance.position, targetAppearances.length),
         piConnection: piConnection.text,
@@ -962,21 +691,14 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         authorRole: getAuthorPositionLabel(bestAppearance.position),
         authorPosition: bestAppearance.position,
         institutionMatch: candidate.institutionEvidence,
-        endorsementEligibility: {
-          hasTargetCategory: endorsementEligibility.hasTargetCategory,
-          inRecentWindow: endorsementEligibility.inRecentWindow,
-          isEligible: endorsementEligibility.isEligible,
-          eligiblePaperCount: endorsementEligibility.eligiblePaperCount,
-          oldestEligiblePaper: endorsementEligibility.oldestEligibleDate,
-          newestEligiblePaper: endorsementEligibility.newestEligibleDate
-        },
         scores: {
           total: totalScore,
+          category: categoryScore,
           piConnection: piScore,
-          endorsementDomain: endorsementDomainScore,
-          recentWindow: recentWindowScore,
           institution: institutionScore,
-          paperCount: paperCountScore
+          repeatedActivity: repeatedActivityScore,
+          authorPosition: authorPositionScore,
+          recentPaper: recentPaperScore
         },
         rankingReason: relevance.join(" "),
         manualCheckInstruction:
@@ -986,45 +708,6 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
     )
     .sort((a, b) => b.scores.total - a.scores.total)
     .slice(0, 12);
-}
-
-// Check if candidate meets arXiv endorser eligibility requirements
-// Requirements: papers in target category within 3 months to 5 years
-function checkEndorsementEligibility(targetAppearances, targetCategory) {
-  const now = new Date();
-  const threeMonthsAgo = new Date(now);
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  const fiveYearsAgo = new Date(now);
-  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-  
-  const hasTargetCategory = targetAppearances.length > 0;
-  
-  // Filter papers within the 3-month to 5-year window
-  const eligiblePapers = targetAppearances.filter((appearance) => {
-    const publishedDate = new Date(appearance.paper.publishedAt);
-    return publishedDate <= threeMonthsAgo && publishedDate >= fiveYearsAgo;
-  });
-  
-  const inRecentWindow = eligiblePapers.length > 0;
-  const isEligible = hasTargetCategory && inRecentWindow;
-  
-  // Get date range of eligible papers
-  let oldestEligibleDate = null;
-  let newestEligibleDate = null;
-  if (eligiblePapers.length > 0) {
-    const dates = eligiblePapers.map((a) => new Date(a.paper.publishedAt));
-    oldestEligibleDate = new Date(Math.min(...dates)).toISOString().split("T")[0];
-    newestEligibleDate = new Date(Math.max(...dates)).toISOString().split("T")[0];
-  }
-  
-  return {
-    hasTargetCategory,
-    inRecentWindow,
-    isEligible,
-    eligiblePaperCount: eligiblePapers.length,
-    oldestEligibleDate,
-    newestEligibleDate
-  };
 }
 
 function buildPaperSignals(paperGroups) {
@@ -1053,24 +736,12 @@ function pickBestAppearance(appearances, targetCategory) {
   })[0];
 }
 
-function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount, endorsementEligibility }) {
+function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
   const reasons = [];
-  
-  // Primary eligibility criteria
-  if (endorsementEligibility.isEligible) {
-    reasons.push(`Likely eligible: ${endorsementEligibility.eligiblePaperCount} paper(s) in ${targetCategory} within the 3-month to 5-year window.`);
-  } else if (endorsementEligibility.hasTargetCategory && !endorsementEligibility.inRecentWindow) {
-    reasons.push(`Has ${targetCategory} papers but may be outside the 3-month to 5-year window.`);
-  } else if (!endorsementEligibility.hasTargetCategory) {
-    reasons.push(`No papers found in exact category ${targetCategory}. May not be able to endorse for this specific domain.`);
-  }
-  
-  // Author position info
   if (exactCategory) {
-    reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on arXiv paper in ${targetCategory}.`);
+    reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on a recent arXiv paper in ${targetCategory}.`);
   }
-  
-  // Secondary signals
+  reasons.push("Paper is within the last five years.");
   if (piConnection.text) reasons.push(piConnection.text);
   if (candidate.institutionEvidence) {
     reasons.push(candidate.institutionEvidence);

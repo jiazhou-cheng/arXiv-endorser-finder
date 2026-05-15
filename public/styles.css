@@ -108,8 +108,6 @@ h1 {
   width: clamp(100px, 21vw, 150px);
   height: auto;
   flex: 0 0 auto;
-  margin-top: 5px;
-  margin-right: 5px;
 }
 
 h2 {
@@ -329,69 +327,6 @@ button.secondary {
   50% { opacity: 0.5; }
 }
 
-/* Category Info Section */
-.category-info {
-  margin-top: 20px;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--soft);
-}
-
-.category-info-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.category-info-header h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.category-loading {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.category-info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-}
-
-.category-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.category-info-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.category-info-value {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.category-info-value small {
-  font-weight: 400;
-}
-
-.category-info-note {
-  margin: 12px 0 0;
-  font-size: 12px;
-}
-
 .progress p {
   margin: 0;
 }
@@ -547,56 +482,4 @@ button.secondary {
   .result-card {
     padding: 18px;
   }
-}
-
-/* Simplified Candidate Card Styles */
-.result-card .result-head {
-  margin-bottom: 12px;
-}
-
-.result-card .result-head h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.candidate-info {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.info-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--muted);
-}
-
-.info-value {
-  font-size: 14px;
-  color: var(--text);
-}
-
-.candidate-links {
-  display: flex;
-  gap: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-}
-
-.candidate-links a {
-  font-size: 13px;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.candidate-links a:hover {
-  text-decoration: underline;
 }

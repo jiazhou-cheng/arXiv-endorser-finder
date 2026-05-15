@@ -20,8 +20,8 @@
 
       <section class="search-panel" aria-labelledby="search-title">
         <div class="section-head">
-          <h2 id="search-title">Find potential endorsers</h2>
-          <p>Searches recent arXiv API metadata through target categories and academic connection.</p>
+          <h2 id="search-title">Find likely potential endorsers</h2>
+          <p>Searches recent arXiv API metadata through target categories and academic connection signals.</p>
         </div>
 
         <form id="search-form" class="form-grid">
@@ -39,7 +39,7 @@
           </label>
 
           <label>
-            <span>Paper search budget</span>
+            <span>Paper budget</span>
             <select id="max-results" name="maxResults">
               <option value="100" selected>100 papers</option>
               <option value="500">500 papers</option>
@@ -53,6 +53,7 @@
             <select id="connection-category" name="connectionCategory">
               <option value="" selected>Select connection type</option>
               <option value="person">Person - PI or senior collaborator (recommended)</option>
+              <option value="institution">Institution</option>
             </select>
           </label>
 
@@ -61,13 +62,8 @@
             <input id="connection" name="connection" placeholder="Full name" disabled />
           </label>
 
-          <button type="submit" id="submit-button">Find</button>
+          <button type="submit" id="submit-button">Find candidates</button>
         </form>
-
-        <section id="category-info" class="category-info hidden" aria-live="polite">
-          <span id="category-info-loading" class="category-loading hidden">Loading...</span>
-          <div id="category-info-content" class="category-info-content"></div>
-        </section>
       </section>
 
       <section class="notice">
@@ -86,9 +82,10 @@
 
       <section id="progress" class="progress hidden" aria-live="polite">
         <div class="spinner"></div>
-        <p>Searching recent arXiv metadata and ranking candidates from PI networks, author roles, and category activity.</p>
+        <p>Searching recent arXiv metadata and ranking candidates from PI networks, institution signals, author roles, and category activity.</p>
       </section>
 
+      <section id="summary" class="summary hidden"></section>
       <section id="results" class="results" aria-live="polite"></section>
     </main>
 
