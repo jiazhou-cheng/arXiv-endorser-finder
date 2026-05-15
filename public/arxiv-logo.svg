@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1030 450" role="img" aria-labelledby="title">
+  <title id="title">arXiv</title>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M18 158h124c9 0 13 4 13 13v45L29 232c-8 1-13 7-13 15v62h140" stroke="#7a7368" stroke-width="34"/>
+    <path d="M252 155h137v31M321 158v153M247 311h145" stroke="#7a7368" stroke-width="34"/>
+    <path d="M491 231 651 57M493 231l199 203" stroke="#7a7368" stroke-width="39"/>
+    <path d="M379 18 577 230 407 410" stroke="#b31b34" stroke-width="39"/>
+    <path d="M704 155h62v155M695 310h122M751 64h1" stroke="#7a7368" stroke-width="34"/>
+    <path d="M864 155l72 157 76-157" stroke="#7a7368" stroke-width="34"/>
+  </g>
+</svg>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>arXivEndorserFinder</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Academic-connection-based</p>
+          <h1 class="brand-title">
+            <img class="arxiv-logo" src="/arxiv-logo.svg" alt="arXiv" />
+            <span>Endorser Finder</span>
+          </h1>
+        </div>
+      </header>
+
+      <section class="search-panel" aria-labelledby="search-title">
+        <div class="section-head">
+          <h2 id="search-title">Find likely potential endorsers</h2>
+          <p>Searches recent arXiv API metadata through target categories and academic connection signals.</p>
+        </div>
+
+        <form id="search-form" class="form-grid">
+          <label>
+            <span>Target category</span>
+            <input
+              id="target-category"
+              name="targetCategory"
+              list="category-list"
+              placeholder="cs.CV"
+              autocomplete="off"
+              required
+            />
+            <datalist id="category-list"></datalist>
+          </label>
+
+          <label>
+            <span>Paper budget</span>
+            <select id="max-results" name="maxResults">
+              <option value="100" selected>100 papers</option>
+              <option value="500">500 papers</option>
+              <option value="1000">1000 papers</option>
+              <option value="5000">5000 papers</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Connection category <small>optional</small></span>
+            <select id="connection-category" name="connectionCategory">
+              <option value="" selected>Select connection type</option>
+              <option value="person">Person - PI or senior collaborator (recommended)</option>
+              <option value="institution">Institution</option>
+            </select>
+          </label>
+
+          <label id="connection-detail" class="connection-detail is-hidden">
+            <span>Connection full name</span>
+            <input id="connection" name="connection" placeholder="Full name" disabled />
+          </label>
+
+          <button type="submit" id="submit-button">Find candidates</button>
+        </form>
+      </section>
+
+      <section class="notice">
+        <strong>arXiv validation requires login.</strong>
+        <span>Please use the button below to log in to arXiv and manually verify endorsement eligibility.</span>
+        <a class="notice-button" href="https://arxiv.org/login" target="_blank" rel="noreferrer">Log in and verify</a>
+      </section>
+
+      <section id="progress" class="progress hidden" aria-live="polite">
+        <div class="spinner"></div>
+        <p>Searching recent arXiv metadata and ranking candidates from PI networks, institution signals, author roles, and category activity.</p>
+      </section>
+
+      <section id="summary" class="summary hidden"></section>
+      <section id="results" class="results" aria-live="polite"></section>
+    </main>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
