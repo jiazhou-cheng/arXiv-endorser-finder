@@ -6,58 +6,43 @@ const results = document.querySelector("#results");
 const submitButton = document.querySelector("#submit-button");
 const connectionInput = document.querySelector("#connection");
 const rateLimitStatus = document.querySelector("#rate-limit-status");
-const resetRateLimitButton = document.querySelector("#reset-rate-limit");
+const rateLimitToggle = document.querySelector("#rate-limit-toggle");
 
 let categories = [];
-let rateLimitInterval = null;
 
 loadCategories();
-startRateLimitMonitor();
+initRateLimitToggle();
 
-resetRateLimitButton.addEventListener("click", resetRateLimit);
+rateLimitToggle.addEventListener("change", toggleRateLimit);
 
-async function startRateLimitMonitor() {
-  await updateRateLimitStatus();
-  rateLimitInterval = setInterval(updateRateLimitStatus, 5000);
-}
-
-async function updateRateLimitStatus() {
+async function initRateLimitToggle() {
   try {
     const response = await fetch("/api/rate-limit");
     const data = await response.json();
-    renderRateLimitStatus(data);
+    rateLimitToggle.checked = data.enabled;
+    updateRateLimitText(data.enabled);
   } catch (error) {
     console.error("Failed to fetch rate limit status:", error);
   }
 }
 
-function renderRateLimitStatus(data) {
-  rateLimitStatus.classList.remove("hidden");
-  const indicator = rateLimitStatus.querySelector(".rate-limit-indicator");
+function updateRateLimitText(enabled) {
   const text = rateLimitStatus.querySelector(".rate-limit-text");
-  
-  if (data.isLimited) {
-    indicator.className = "rate-limit-indicator limited";
-    text.textContent = `Rate limited - wait ${data.remainingSeconds}s (backoff: ${data.backoffMultiplier}x)`;
-    rateLimitStatus.classList.add("is-limited");
-  } else {
-    indicator.className = "rate-limit-indicator ok";
-    const delaySeconds = (data.currentDelay / 1000).toFixed(1);
-    text.textContent = `Ready - ${data.consecutiveRequests}/${data.config.burstLimit} requests, ${delaySeconds}s delay`;
-    rateLimitStatus.classList.remove("is-limited");
-  }
+  text.textContent = enabled ? "Rate limiting ON" : "Rate limiting OFF";
 }
 
-async function resetRateLimit() {
+async function toggleRateLimit() {
   try {
-    resetRateLimitButton.disabled = true;
-    const response = await fetch("/api/rate-limit/reset", { method: "POST" });
+    const enabled = rateLimitToggle.checked;
+    const response = await fetch("/api/rate-limit/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
     const data = await response.json();
-    renderRateLimitStatus(data.status);
+    updateRateLimitText(data.enabled);
   } catch (error) {
-    console.error("Failed to reset rate limit:", error);
-  } finally {
-    resetRateLimitButton.disabled = false;
+    console.error("Failed to toggle rate limit:", error);
   }
 }
 
@@ -80,7 +65,6 @@ form.addEventListener("submit", async (event) => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Search failed.");
-    renderSummary(data);
     renderResults(data);
   } catch (error) {
     showError(error.message);

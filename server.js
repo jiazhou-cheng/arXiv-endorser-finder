@@ -30,6 +30,7 @@ const MAX_PAPERS = 5000;
 const RECENT_YEARS = 5;
 
 // Rate limiting state
+let rateLimitEnabled = false; // OFF by default
 let lastArxivRequestAt = 0;
 let arxivRateLimitedUntil = 0;
 let consecutiveRequests = 0;
@@ -224,13 +225,11 @@ createServer(async (req, res) => {
       });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/rate-limit/reset") {
-      currentBackoffMultiplier = 1;
-      consecutiveRequests = 0;
-      arxivRateLimitedUntil = 0;
-      lastBurstResetAt = Date.now();
-      console.log("[Rate Limit] Manually reset by user");
-      return sendJson(res, { message: "Rate limit state reset", status: getRateLimitStatus() });
+    if (req.method === "POST" && url.pathname === "/api/rate-limit/toggle") {
+      const payload = await readJson(req);
+      rateLimitEnabled = Boolean(payload.enabled);
+      console.log(`[Rate Limit] Toggled to: ${rateLimitEnabled ? "ON" : "OFF"}`);
+      return sendJson(res, { enabled: rateLimitEnabled });
     }
 
     if (req.method === "POST" && url.pathname === "/api/search") {
@@ -361,18 +360,14 @@ function isArxivRateLimited() {
 
 function getRateLimitStatus() {
   const now = Date.now();
-  const isLimited = now < arxivRateLimitedUntil;
+  const isLimited = rateLimitEnabled && now < arxivRateLimitedUntil;
   const remainingMs = isLimited ? arxivRateLimitedUntil - now : 0;
-  const timeSinceLastRequest = now - lastArxivRequestAt;
   
   return {
+    enabled: rateLimitEnabled,
     isLimited,
     remainingMs,
     remainingSeconds: Math.ceil(remainingMs / 1000),
-    consecutiveRequests,
-    currentDelay: getCurrentDelay(),
-    timeSinceLastRequest,
-    backoffMultiplier: currentBackoffMultiplier,
   };
 }
 
@@ -510,6 +505,11 @@ function assertAllowedUrl(url) {
 }
 
 async function waitForArxivRateLimit() {
+  // Skip rate limiting if disabled
+  if (!rateLimitEnabled) {
+    return;
+  }
+  
   resetBurstCounterIfNeeded();
   
   // Check burst limit

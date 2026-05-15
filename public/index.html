@@ -63,12 +63,14 @@
         <a class="notice-button" href="https://arxiv.org/login" target="_blank" rel="noreferrer">Log in and verify</a>
       </section>
 
-      <section id="rate-limit-status" class="rate-limit-status hidden" aria-live="polite">
+      <section id="rate-limit-status" class="rate-limit-status" aria-live="polite">
         <div class="rate-limit-info">
-          <span class="rate-limit-indicator"></span>
-          <span class="rate-limit-text">Rate limit status</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="rate-limit-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="rate-limit-text">Rate limiting</span>
         </div>
-        <button type="button" id="reset-rate-limit" class="reset-button">Reset</button>
       </section>
 
       <section id="progress" class="progress hidden" aria-live="polite">
