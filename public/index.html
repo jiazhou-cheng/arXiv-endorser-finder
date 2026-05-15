@@ -20,8 +20,8 @@
 
       <section class="search-panel" aria-labelledby="search-title">
         <div class="section-head">
-          <h2 id="search-title">Find likely potential endorsers</h2>
-          <p>Searches recent arXiv API metadata through target categories and academic connection signals.</p>
+          <h2 id="search-title">Find potential endorsers</h2>
+          <p>Searches recent arXiv API metadata through target categories and academic connection.</p>
         </div>
 
         <form id="search-form" class="form-grid">
@@ -39,7 +39,7 @@
           </label>
 
           <label>
-            <span>Paper budget</span>
+            <span>Paper search budget</span>
             <select id="max-results" name="maxResults">
               <option value="100" selected>100 papers</option>
               <option value="500">500 papers</option>
@@ -62,7 +62,7 @@
             <input id="connection" name="connection" placeholder="Full name" disabled />
           </label>
 
-          <button type="submit" id="submit-button">Find candidates</button>
+          <button type="submit" id="submit-button">Find</button>
         </form>
 
         <section id="category-info" class="category-info hidden" aria-live="polite">
@@ -90,7 +90,6 @@
         <p>Searching recent arXiv metadata and ranking candidates from PI networks, institution signals, author roles, and category activity.</p>
       </section>
 
-      <section id="summary" class="summary hidden"></section>
       <section id="results" class="results" aria-live="polite"></section>
     </main>
 

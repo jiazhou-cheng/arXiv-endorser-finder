@@ -3,7 +3,6 @@ const categoryInput = document.querySelector("#target-category");
 const categoryList = document.querySelector("#category-list");
 const progress = document.querySelector("#progress");
 const results = document.querySelector("#results");
-const summary = document.querySelector("#summary");
 const submitButton = document.querySelector("#submit-button");
 const connectionCategory = document.querySelector("#connection-category");
 const connectionDetail = document.querySelector("#connection-detail");
@@ -140,7 +139,6 @@ form.addEventListener("submit", async (event) => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Search failed.");
-    renderSummary(data);
     renderResults(data);
   } catch (error) {
     showError(error.message);
@@ -172,24 +170,6 @@ function updateConnectionField() {
   connectionInput.placeholder =
     type === "institution" ? "Full official institution name" : "Full name of PI or senior collaborator";
 }
-
-function renderSummary(data) {
-  summary.classList.remove("hidden");
-  summary.innerHTML = `
-  <div class="summary-item">
-  <span>Recent window</span>
-  <b>3 months - 5 years</b>
-  </div>
-  <div class="summary-item">
-  <span>Papers found</span>
-  <b>${data.searchedPaperCount}</b>
-  </div>
-  <div class="summary-item">
-  <span>Candidates</span>
-  <b>${data.candidates.length}</b>
-  </div>
-  `;
-  }
 
 function renderResults(data) {
   const candidates = data.candidates;
