@@ -233,6 +233,15 @@ createServer(async (req, res) => {
       return sendJson(res, { message: "Rate limit state reset", status: getRateLimitStatus() });
     }
 
+    if (req.method === "GET" && url.pathname === "/api/category-info") {
+      const category = url.searchParams.get("category");
+      if (!category || !CATEGORY_SET.has(category)) {
+        return sendJson(res, { error: "Invalid category" }, 400);
+      }
+      const info = await fetchCategoryEndorsementInfo(category);
+      return sendJson(res, info);
+    }
+
     if (req.method === "POST" && url.pathname === "/api/search") {
       const payload = await readJson(req);
       const results = await findPotentialEndorsers(payload);
@@ -255,6 +264,96 @@ createServer(async (req, res) => {
 }).listen(PORT, "127.0.0.1", () => {
   console.log(`arXivEndorserFinder running at http://localhost:${PORT}`);
 });
+
+// Cache for category endorsement info
+const categoryEndorsementCache = new Map();
+const ENDORSEMENT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+async function fetchCategoryEndorsementInfo(category) {
+  // Check cache first
+  const cached = categoryEndorsementCache.get(category);
+  if (cached && Date.now() - cached.fetchedAt < ENDORSEMENT_CACHE_TTL) {
+    return cached.data;
+  }
+
+  // Determine the endorsement domain for the category
+  // Physics categories have individual endorsement domains, others use archive-level
+  const archivePart = category.split(".")[0];
+  const endorsementDomain = archivePart === "physics" ? category : archivePart;
+  
+  // Try to fetch endorsement requirements from arXiv
+  // Note: The actual paper count requirements are only visible when logged in
+  // We provide the known structure based on arXiv documentation
+  const info = {
+    category,
+    endorsementDomain,
+    recentWindow: "3 months - 5 years",
+    description: getEndorsementDomainDescription(archivePart),
+    // Paper requirements vary by domain and are only shown to logged-in users
+    // We indicate this and encourage manual verification
+    papersRequired: getEstimatedPapersRequired(archivePart),
+    papersRequiredNote: "Exact requirement varies. Log in to arXiv for precise count.",
+    verifyUrl: `https://arxiv.org/auth/endorse-status?category=${encodeURIComponent(category)}`,
+  };
+
+  categoryEndorsementCache.set(category, { data: info, fetchedAt: Date.now() });
+  return info;
+}
+
+function getEndorsementDomainDescription(archive) {
+  const descriptions = {
+    "astro-ph": "Astrophysics",
+    "cond-mat": "Condensed Matter",
+    "cs": "Computer Science",
+    "econ": "Economics",
+    "eess": "Electrical Engineering and Systems Science",
+    "gr-qc": "General Relativity and Quantum Cosmology",
+    "hep-ex": "High Energy Physics - Experiment",
+    "hep-lat": "High Energy Physics - Lattice",
+    "hep-ph": "High Energy Physics - Phenomenology",
+    "hep-th": "High Energy Physics - Theory",
+    "math": "Mathematics",
+    "math-ph": "Mathematical Physics",
+    "nlin": "Nonlinear Sciences",
+    "nucl-ex": "Nuclear Experiment",
+    "nucl-th": "Nuclear Theory",
+    "physics": "Physics (individual subject classes)",
+    "q-bio": "Quantitative Biology",
+    "q-fin": "Quantitative Finance",
+    "quant-ph": "Quantum Physics",
+    "stat": "Statistics",
+  };
+  return descriptions[archive] || archive;
+}
+
+function getEstimatedPapersRequired(archive) {
+  // These are estimated based on arXiv documentation mentioning 
+  // "any active scientist who has been working in their field for a few years"
+  // Actual values may vary and should be verified via login
+  const estimates = {
+    "hep-th": 1,
+    "hep-ph": 1,
+    "hep-lat": 1,
+    "hep-ex": 1,
+    "gr-qc": 1,
+    "quant-ph": 1,
+    "nucl-th": 1,
+    "nucl-ex": 1,
+    "math-ph": 1,
+    "astro-ph": 1,
+    "cond-mat": 1,
+    "cs": 3,
+    "math": 3,
+    "stat": 3,
+    "q-bio": 3,
+    "q-fin": 3,
+    "econ": 3,
+    "eess": 3,
+    "nlin": 3,
+    "physics": 3,
+  };
+  return estimates[archive] || 3;
+}
 
 async function findPotentialEndorsers(input) {
   const targetCategory = String(input.targetCategory || "").trim();

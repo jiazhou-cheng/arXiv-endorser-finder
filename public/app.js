@@ -10,9 +10,14 @@ const connectionDetail = document.querySelector("#connection-detail");
 const connectionInput = document.querySelector("#connection");
 const rateLimitStatus = document.querySelector("#rate-limit-status");
 const resetRateLimitButton = document.querySelector("#reset-rate-limit");
+const categoryInfo = document.querySelector("#category-info");
+const categoryInfoContent = document.querySelector("#category-info-content");
+const categoryInfoLoading = document.querySelector("#category-info-loading");
+const categoryInfoTitle = document.querySelector("#category-info-title");
 
 let categories = [];
 let rateLimitInterval = null;
+let currentCategoryInfo = null;
 
 loadCategories();
 updateConnectionField();
@@ -20,6 +25,8 @@ startRateLimitMonitor();
 
 connectionCategory.addEventListener("change", updateConnectionField);
 resetRateLimitButton.addEventListener("click", resetRateLimit);
+categoryInput.addEventListener("change", handleCategoryChange);
+categoryInput.addEventListener("blur", handleCategoryChange);
 
 async function startRateLimitMonitor() {
   await updateRateLimitStatus();
@@ -64,6 +71,57 @@ async function resetRateLimit() {
   } finally {
     resetRateLimitButton.disabled = false;
   }
+}
+
+async function handleCategoryChange() {
+  const category = categoryInput.value.trim();
+  if (!category || !categories.includes(category)) {
+    categoryInfo.classList.add("hidden");
+    currentCategoryInfo = null;
+    return;
+  }
+  
+  await fetchCategoryInfo(category);
+}
+
+async function fetchCategoryInfo(category) {
+  categoryInfo.classList.remove("hidden");
+  categoryInfoLoading.classList.remove("hidden");
+  categoryInfoContent.innerHTML = "";
+  categoryInfoTitle.textContent = `Category: ${category}`;
+  
+  try {
+    const response = await fetch(`/api/category-info?category=${encodeURIComponent(category)}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to fetch category info");
+    currentCategoryInfo = data;
+    renderCategoryInfo(data);
+  } catch (error) {
+    categoryInfoContent.innerHTML = `<p class="muted">Could not load category info: ${escapeHtml(error.message)}</p>`;
+  } finally {
+    categoryInfoLoading.classList.remove("hidden");
+    categoryInfoLoading.classList.add("hidden");
+  }
+}
+
+function renderCategoryInfo(data) {
+  categoryInfoContent.innerHTML = `
+    <div class="category-info-grid">
+      <div class="category-info-item">
+        <span class="category-info-label">Endorsement domain</span>
+        <span class="category-info-value">${escapeHtml(data.endorsementDomain)}</span>
+      </div>
+      <div class="category-info-item">
+        <span class="category-info-label">Recent window</span>
+        <span class="category-info-value">${escapeHtml(data.recentWindow)}</span>
+      </div>
+      <div class="category-info-item">
+        <span class="category-info-label">Papers required</span>
+        <span class="category-info-value">${data.papersRequired}+ papers <small class="muted">(estimated)</small></span>
+      </div>
+    </div>
+    <p class="category-info-note muted">${escapeHtml(data.papersRequiredNote)}</p>
+  `;
 }
 
 form.addEventListener("submit", async (event) => {
@@ -119,31 +177,22 @@ function updateConnectionField() {
 }
 
 function renderSummary(data) {
-  const focusLabel = data.searchStrategy.focusedSearch ? "Network focused" : "Category only";
   summary.classList.remove("hidden");
   summary.innerHTML = `
-    <div class="summary-item">
-      <span>Category</span>
-      <b>${escapeHtml(data.targetCategory)}</b>
-    </div>
-    <div class="summary-item">
-      <span>Recent window</span>
-      <b>${data.recentYears} years</b>
-    </div>
-    <div class="summary-item">
-      <span>Papers found</span>
-      <b>${data.searchedPaperCount}</b>
-    </div>
-    <div class="summary-item">
-      <span>Candidates</span>
-      <b>${data.candidates.length}</b>
-    </div>
-    <div class="summary-item">
-      <span>Search mode</span>
-      <b>${escapeHtml(focusLabel)}</b>
-    </div>
+  <div class="summary-item">
+  <span>Recent window</span>
+  <b>3 months - 5 years</b>
+  </div>
+  <div class="summary-item">
+  <span>Papers found</span>
+  <b>${data.searchedPaperCount}</b>
+  </div>
+  <div class="summary-item">
+  <span>Candidates</span>
+  <b>${data.candidates.length}</b>
+  </div>
   `;
-}
+  }
 
 function renderResults(data) {
   const candidates = data.candidates;
