@@ -749,15 +749,25 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const sourcePaper = bestAppearance.paper;
       const exactCategory = candidate.categories.has(targetCategory);
       const piConnection = getPiConnection(candidate.name, piName, piCoauthors);
+      
+      // Core eligibility criteria based on arXiv endorser requirements:
+      // 1. Endorsement Domain: Must have papers in the exact target category
+      // 2. Recent Window: Papers must be within 3 months to 5 years
+      const endorsementEligibility = checkEndorsementEligibility(targetAppearances, targetCategory);
+      
+      // Scoring weights - endorsement eligibility is now the primary factor
+      const endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 50 : 0;
+      const recentWindowScore = endorsementEligibility.inRecentWindow ? 40 : 0;
+      
+      // Secondary factors
       const authorPositionScore = getAuthorPositionScore(bestAppearance.position);
-      const categoryScore = exactCategory ? 20 : 0;
-      const recentPaperScore = getRecentPaperPointScore(sourcePaper.publishedAt);
-      const piScore = piConnection.level === 1 ? 30 : piConnection.level === 2 ? 10 : 0;
-      const institutionScore = candidate.institutionEvidence ? 25 : 0;
-      const repeatedActivityScore = Math.max(0, targetAppearances.length - 1) * 10;
+      const piScore = piConnection.level === 1 ? 20 : piConnection.level === 2 ? 8 : 0;
+      const institutionScore = candidate.institutionEvidence ? 15 : 0;
+      const repeatedActivityScore = Math.min(Math.max(0, targetAppearances.length - 1) * 5, 20);
+      
       const totalScore =
-        categoryScore +
-        recentPaperScore +
+        endorsementDomainScore +
+        recentWindowScore +
         authorPositionScore +
         piScore +
         institutionScore +
@@ -770,7 +780,8 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         piConnection,
         exactCategory,
         bestAppearance,
-        targetPaperCount: targetAppearances.length
+        targetPaperCount: targetAppearances.length,
+        endorsementEligibility
       });
 
       return {
@@ -782,7 +793,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         categories: [...candidate.categories],
         publishedAt: sourcePaper.publishedAt,
         abstractUrl: sourcePaper.absUrl,
-        potentialEndorser: true,
+        potentialEndorser: endorsementEligibility.isEligible,
         categoryMatch: exactCategory,
         confidence: getConfidenceLabel(bestAppearance.position, targetAppearances.length),
         piConnection: piConnection.text,
@@ -790,14 +801,22 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         authorRole: getAuthorPositionLabel(bestAppearance.position),
         authorPosition: bestAppearance.position,
         institutionMatch: candidate.institutionEvidence,
+        endorsementEligibility: {
+          hasTargetCategory: endorsementEligibility.hasTargetCategory,
+          inRecentWindow: endorsementEligibility.inRecentWindow,
+          isEligible: endorsementEligibility.isEligible,
+          eligiblePaperCount: endorsementEligibility.eligiblePaperCount,
+          oldestEligiblePaper: endorsementEligibility.oldestEligibleDate,
+          newestEligiblePaper: endorsementEligibility.newestEligibleDate
+        },
         scores: {
           total: totalScore,
-          category: categoryScore,
+          endorsementDomain: endorsementDomainScore,
+          recentWindow: recentWindowScore,
           piConnection: piScore,
           institution: institutionScore,
           repeatedActivity: repeatedActivityScore,
-          authorPosition: authorPositionScore,
-          recentPaper: recentPaperScore
+          authorPosition: authorPositionScore
         },
         rankingReason: relevance.join(" "),
         manualCheckInstruction:
@@ -807,6 +826,45 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
     )
     .sort((a, b) => b.scores.total - a.scores.total)
     .slice(0, 12);
+}
+
+// Check if candidate meets arXiv endorser eligibility requirements
+// Requirements: papers in target category within 3 months to 5 years
+function checkEndorsementEligibility(targetAppearances, targetCategory) {
+  const now = new Date();
+  const threeMonthsAgo = new Date(now);
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const fiveYearsAgo = new Date(now);
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  
+  const hasTargetCategory = targetAppearances.length > 0;
+  
+  // Filter papers within the 3-month to 5-year window
+  const eligiblePapers = targetAppearances.filter((appearance) => {
+    const publishedDate = new Date(appearance.paper.publishedAt);
+    return publishedDate <= threeMonthsAgo && publishedDate >= fiveYearsAgo;
+  });
+  
+  const inRecentWindow = eligiblePapers.length > 0;
+  const isEligible = hasTargetCategory && inRecentWindow;
+  
+  // Get date range of eligible papers
+  let oldestEligibleDate = null;
+  let newestEligibleDate = null;
+  if (eligiblePapers.length > 0) {
+    const dates = eligiblePapers.map((a) => new Date(a.paper.publishedAt));
+    oldestEligibleDate = new Date(Math.min(...dates)).toISOString().split("T")[0];
+    newestEligibleDate = new Date(Math.max(...dates)).toISOString().split("T")[0];
+  }
+  
+  return {
+    hasTargetCategory,
+    inRecentWindow,
+    isEligible,
+    eligiblePaperCount: eligiblePapers.length,
+    oldestEligibleDate,
+    newestEligibleDate
+  };
 }
 
 function buildPaperSignals(paperGroups) {
@@ -835,12 +893,24 @@ function pickBestAppearance(appearances, targetCategory) {
   })[0];
 }
 
-function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
+function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount, endorsementEligibility }) {
   const reasons = [];
-  if (exactCategory) {
-    reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on a recent arXiv paper in ${targetCategory}.`);
+  
+  // Primary eligibility criteria
+  if (endorsementEligibility.isEligible) {
+    reasons.push(`Likely eligible: ${endorsementEligibility.eligiblePaperCount} paper(s) in ${targetCategory} within the 3-month to 5-year window.`);
+  } else if (endorsementEligibility.hasTargetCategory && !endorsementEligibility.inRecentWindow) {
+    reasons.push(`Has ${targetCategory} papers but may be outside the 3-month to 5-year window.`);
+  } else if (!endorsementEligibility.hasTargetCategory) {
+    reasons.push(`No papers found in exact category ${targetCategory}. May not be able to endorse for this specific domain.`);
   }
-  reasons.push("Paper is within the last five years.");
+  
+  // Author position info
+  if (exactCategory) {
+    reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on arXiv paper in ${targetCategory}.`);
+  }
+  
+  // Secondary signals
   if (piConnection.text) reasons.push(piConnection.text);
   if (candidate.institutionEvidence) {
     reasons.push(candidate.institutionEvidence);

@@ -542,7 +542,49 @@ button.secondary {
   }
 
   .search-panel,
-  .result-card {
+/* Eligibility Status Styles */
+.eligibility-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--soft);
+  border-radius: 6px;
+}
+
+.eligibility-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pill.eligible {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+  font-weight: 600;
+}
+
+.pill.not-eligible {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+  font-weight: 600;
+}
+
+.pill.score-high {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.result-card.low-confidence {
+  opacity: 0.85;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.result-card.low-confidence .result-head h3 {
+  color: var(--muted);
+}
+
+.result-card {
     padding: 18px;
   }
 }
