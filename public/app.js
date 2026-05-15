@@ -194,25 +194,26 @@ function renderSummary(data) {
 function renderResults(data) {
   const candidates = data.candidates;
   const noFocusedPapers = data.searchStrategy.focusedSearch && data.searchedPaperCount === 0;
-
+  const searchMode = data.searchStrategy.searchMode || "category";
+  
   if (!candidates.length) {
-    results.innerHTML = `
-      <div class="empty">
-        <h3>${noFocusedPapers ? "No focused papers found" : "No potential candidates found"}</h3>
-        <p class="muted">${getEmptyMessage(data, noFocusedPapers)}</p>
-      </div>
-    `;
-    return;
-  }
-
   results.innerHTML = `
-    <div class="empty">
-      <h3>Manual confirmation required</h3>
-      <p class="muted">${escapeHtml(data.guidance)}</p>
-    </div>
-    ${candidates.map(renderCandidate).join("")}
+  <div class="empty">
+  <h3>${noFocusedPapers ? "No focused papers found" : "No potential candidates found"}</h3>
+  <p class="muted">${getEmptyMessage(data, noFocusedPapers)}</p>
+  </div>
   `;
-}
+  return;
+  }
+  
+  results.innerHTML = `
+  <div class="empty">
+  <h3>Manual confirmation required</h3>
+  <p class="muted">${escapeHtml(data.guidance)}</p>
+  </div>
+  ${candidates.map((c) => renderCandidate(c, searchMode)).join("")}
+  `;
+  }
 
 function getEmptyMessage(data, noFocusedPapers) {
   if (noFocusedPapers) {
@@ -224,14 +225,34 @@ function getEmptyMessage(data, noFocusedPapers) {
   return "Try a larger paper budget, add a PI/collaborator, or search a neighboring category.";
 }
 
-function renderCandidate(candidate) {
+function renderCandidate(candidate, searchMode) {
   const eligibility = candidate.endorsementEligibility || {};
   const paperCount = eligibility.eligiblePaperCount || candidate.paperCount || 0;
   const connectionText = candidate.piConnection || "No direct connection";
+  const isInstitutionMode = searchMode === "institution";
   
   // Build endorser check URL from arXiv paper ID
   const arxivId = candidate.sourcePaper;
   const endorserCheckUrl = `https://arxiv.org/auth/show-endorsers/${arxivId}`;
+  
+  // Different display based on search mode
+  const infoHtml = isInstitutionMode
+    ? `
+      <div class="info-item">
+        <span class="info-label">Papers in category</span>
+        <span class="info-value">${paperCount}</span>
+      </div>
+    `
+    : `
+      <div class="info-item">
+        <span class="info-label">Connection</span>
+        <span class="info-value">${escapeHtml(connectionText)}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Papers in category</span>
+        <span class="info-value">${paperCount}</span>
+      </div>
+    `;
   
   return `
     <article class="result-card">
@@ -240,14 +261,7 @@ function renderCandidate(candidate) {
       </div>
 
       <div class="candidate-info">
-        <div class="info-item">
-          <span class="info-label">Connection</span>
-          <span class="info-value">${escapeHtml(connectionText)}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Papers in category</span>
-          <span class="info-value">${paperCount}</span>
-        </div>
+        ${infoHtml}
       </div>
 
       <div class="candidate-links">

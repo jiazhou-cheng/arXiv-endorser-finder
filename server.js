@@ -454,13 +454,14 @@ async function findPotentialEndorsers(input) {
   return {
     targetCategory,
     recentYears: RECENT_YEARS,
-    searchStrategy: {
-      focusedSearch,
-      connection,
-      connectionCategory,
-      connectionType,
-      institution,
-      piName,
+  searchStrategy: {
+  focusedSearch,
+  searchMode: institution && !piName ? "institution" : piName ? "person" : "category",
+  connection,
+  connectionCategory,
+  connectionType,
+  institution,
+  piName,
       groups: paperGroups.map((group) => ({
         label: group.label,
         count: group.papers.length
@@ -708,6 +709,7 @@ async function waitForArxivRateLimit() {
 function rankPotentialCandidates({ papers, paperGroups, targetCategory, institution, piName, piCoauthors }) {
   const byName = new Map();
   const paperSignals = buildPaperSignals(paperGroups);
+  const isInstitutionMode = Boolean(institution && !piName);
 
   for (const paper of papers) {
     const signals = paperSignals.get(normalizeArxivId(paper.arxivId)) || new Set(["category"]);
@@ -751,27 +753,48 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const piConnection = getPiConnection(candidate.name, piName, piCoauthors);
       
       // Core eligibility criteria based on arXiv endorser requirements:
-      // 1. PI Connection: Most important - you need someone you know who can endorse
-      // 2. Endorsement Domain: Must have papers in the exact target category
-      // 3. Recent Window: Papers must be within 3 months to 5 years
+      // 1. Endorsement Domain: Must have papers in the exact target category
+      // 2. Recent Window: Papers must be within 3 months to 5 years
+      // 3. For person mode: PI Connection is most important
+      // 4. For institution mode: Paper count in target category is most important
       const endorsementEligibility = checkEndorsementEligibility(targetAppearances, targetCategory);
       
-      // Scoring weights - PI connection is the most important factor
-      // Level 1 = direct PI coauthor, Level 2 = PI's coauthor's coauthor
-      const piScore = piConnection.level === 1 ? 25 : piConnection.level === 2 ? 15 : 0;
-      const endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 30 : 0;
-      const recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
+      let totalScore;
+      let piScore = 0;
+      let endorsementDomainScore = 0;
+      let recentWindowScore = 0;
+      let institutionScore = 0;
+      let paperCountScore = 0;
       
-      // Minor factors
-      const institutionScore = candidate.institutionEvidence ? 10 : 0;
-      const repeatedActivityScore = Math.min(targetAppearances.length * 3, 15);
-      
-      const totalScore =
-        piScore +
-        endorsementDomainScore +
-        recentWindowScore +
-        institutionScore +
-        repeatedActivityScore;
+      if (isInstitutionMode) {
+        // Institution mode: prioritize people who published most in target category within recent window
+        endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 20 : 0;
+        recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
+        institutionScore = candidate.institutionEvidence ? 10 : 0;
+        // Paper count is the most important factor - more papers = higher score
+        paperCountScore = Math.min(endorsementEligibility.eligiblePaperCount * 10, 50);
+        
+        totalScore =
+          paperCountScore +
+          endorsementDomainScore +
+          recentWindowScore +
+          institutionScore;
+      } else {
+        // Person mode: PI connection is the most important factor
+        // Level 1 = direct PI coauthor, Level 2 = PI's coauthor's coauthor
+        piScore = piConnection.level === 1 ? 50 : piConnection.level === 2 ? 25 : 0;
+        endorsementDomainScore = endorsementEligibility.hasTargetCategory ? 30 : 0;
+        recentWindowScore = endorsementEligibility.inRecentWindow ? 20 : 0;
+        institutionScore = candidate.institutionEvidence ? 10 : 0;
+        paperCountScore = Math.min(endorsementEligibility.eligiblePaperCount * 3, 15);
+        
+        totalScore =
+          piScore +
+          endorsementDomainScore +
+          recentWindowScore +
+          institutionScore +
+          paperCountScore;
+      }
 
       const relevance = buildRelevanceReasons({
         candidate,
@@ -815,7 +838,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
           endorsementDomain: endorsementDomainScore,
           recentWindow: recentWindowScore,
           institution: institutionScore,
-          repeatedActivity: repeatedActivityScore
+          paperCount: paperCountScore
         },
         rankingReason: relevance.join(" "),
         manualCheckInstruction:
