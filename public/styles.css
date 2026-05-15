@@ -494,3 +494,50 @@ button.secondary {
     padding: 18px;
   }
 }
+
+/* Simplified Candidate Card */
+.candidate-name {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.candidate-tags {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--text);
+}
+
+.tag-yes {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.tag-no {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+.candidate-links {
+  display: flex;
+  gap: 16px;
+}
+
+.candidate-links a {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.candidate-links a:hover {
+  text-decoration: underline;
+}
