@@ -194,11 +194,9 @@ function renderSummary(data) {
 function renderResults(data) {
   const candidates = data.candidates;
   const noFocusedPapers = data.searchStrategy.focusedSearch && data.searchedPaperCount === 0;
-  const strategyNotice = data.searchStrategy.focusedSearch ? renderSearchStrategy(data.searchStrategy) : "";
 
   if (!candidates.length) {
     results.innerHTML = `
-      ${strategyNotice}
       <div class="empty">
         <h3>${noFocusedPapers ? "No focused papers found" : "No potential candidates found"}</h3>
         <p class="muted">${getEmptyMessage(data, noFocusedPapers)}</p>
@@ -208,42 +206,11 @@ function renderResults(data) {
   }
 
   results.innerHTML = `
-    ${strategyNotice}
     <div class="empty">
       <h3>Manual confirmation required</h3>
       <p class="muted">${escapeHtml(data.guidance)}</p>
     </div>
     ${candidates.map(renderCandidate).join("")}
-  `;
-}
-
-function renderSearchStrategy(strategy) {
-  const institutionLine = strategy.institution
-    ? `
-      <div class="manual-link">
-        <span>${strategy.institutionEvidenceCount} papers</span>
-        <span>Contained the exact institution full name: ${escapeHtml(strategy.institutionFullName)}</span>
-      </div>
-    `
-    : "";
-  return `
-    <div class="empty">
-      <h3>Search strategy</h3>
-      <p class="muted">The app searched recent arXiv API metadata using your connection category and full-name input as ranking signals. It did not log in to arXiv or open endorser-check pages.</p>
-      <div class="manual-links">
-        ${institutionLine}
-        ${strategy.groups
-          .map(
-            (group) => `
-              <div class="manual-link">
-                <span>${group.count} papers</span>
-                <span>${escapeHtml(group.label)}</span>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
   `;
 }
 
