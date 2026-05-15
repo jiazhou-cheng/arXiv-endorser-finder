@@ -72,6 +72,14 @@
         <a class="notice-button" href="https://arxiv.org/login" target="_blank" rel="noreferrer">Log in and verify</a>
       </section>
 
+      <section id="rate-limit-status" class="rate-limit-status hidden" aria-live="polite">
+        <div class="rate-limit-info">
+          <span class="rate-limit-indicator"></span>
+          <span class="rate-limit-text">Rate limit status</span>
+        </div>
+        <button type="button" id="reset-rate-limit" class="reset-button">Reset</button>
+      </section>
+
       <section id="progress" class="progress hidden" aria-live="polite">
         <div class="spinner"></div>
         <p>Searching recent arXiv metadata and ranking candidates from PI networks, institution signals, author roles, and category activity.</p>

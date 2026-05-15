@@ -8,13 +8,63 @@ const submitButton = document.querySelector("#submit-button");
 const connectionCategory = document.querySelector("#connection-category");
 const connectionDetail = document.querySelector("#connection-detail");
 const connectionInput = document.querySelector("#connection");
+const rateLimitStatus = document.querySelector("#rate-limit-status");
+const resetRateLimitButton = document.querySelector("#reset-rate-limit");
 
 let categories = [];
+let rateLimitInterval = null;
 
 loadCategories();
 updateConnectionField();
+startRateLimitMonitor();
 
 connectionCategory.addEventListener("change", updateConnectionField);
+resetRateLimitButton.addEventListener("click", resetRateLimit);
+
+async function startRateLimitMonitor() {
+  await updateRateLimitStatus();
+  rateLimitInterval = setInterval(updateRateLimitStatus, 5000);
+}
+
+async function updateRateLimitStatus() {
+  try {
+    const response = await fetch("/api/rate-limit");
+    const data = await response.json();
+    renderRateLimitStatus(data);
+  } catch (error) {
+    console.error("Failed to fetch rate limit status:", error);
+  }
+}
+
+function renderRateLimitStatus(data) {
+  rateLimitStatus.classList.remove("hidden");
+  const indicator = rateLimitStatus.querySelector(".rate-limit-indicator");
+  const text = rateLimitStatus.querySelector(".rate-limit-text");
+  
+  if (data.isLimited) {
+    indicator.className = "rate-limit-indicator limited";
+    text.textContent = `Rate limited - wait ${data.remainingSeconds}s (backoff: ${data.backoffMultiplier}x)`;
+    rateLimitStatus.classList.add("is-limited");
+  } else {
+    indicator.className = "rate-limit-indicator ok";
+    const delaySeconds = (data.currentDelay / 1000).toFixed(1);
+    text.textContent = `Ready - ${data.consecutiveRequests}/${data.config.burstLimit} requests, ${delaySeconds}s delay`;
+    rateLimitStatus.classList.remove("is-limited");
+  }
+}
+
+async function resetRateLimit() {
+  try {
+    resetRateLimitButton.disabled = true;
+    const response = await fetch("/api/rate-limit/reset", { method: "POST" });
+    const data = await response.json();
+    renderRateLimitStatus(data.status);
+  } catch (error) {
+    console.error("Failed to reset rate limit:", error);
+  } finally {
+    resetRateLimitButton.disabled = false;
+  }
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
