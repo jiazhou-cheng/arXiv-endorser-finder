@@ -276,10 +276,10 @@ async function fetchCategoryEndorsementInfo(category) {
     return cached.data;
   }
 
-  // Determine the endorsement domain for the category
-  // Physics categories have individual endorsement domains, others use archive-level
+  // Endorsement domains are per-subcategory (e.g., cs.AI, cs.CV, physics.optics)
+  // The full category is the endorsement domain
   const archivePart = category.split(".")[0];
-  const endorsementDomain = archivePart === "physics" ? category : archivePart;
+  const endorsementDomain = category;
   
   // Try to fetch endorsement requirements from arXiv
   // Note: The actual paper count requirements are only visible when logged in
