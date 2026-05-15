@@ -49,20 +49,11 @@
           </label>
 
           <label>
-            <span>Connection category <small>optional</small></span>
-            <select id="connection-category" name="connectionCategory">
-              <option value="" selected>Select connection type</option>
-              <option value="person">Person - PI or senior collaborator (recommended)</option>
-              <option value="institution">Institution</option>
-            </select>
+            <span>PI / Senior collaborator <small>optional</small></span>
+            <input id="connection" name="connection" placeholder="Full name (e.g. Jonathan A. Fan)" />
           </label>
 
-          <label id="connection-detail" class="connection-detail is-hidden">
-            <span>Connection full name</span>
-            <input id="connection" name="connection" placeholder="Full name" disabled />
-          </label>
-
-          <button type="submit" id="submit-button">Find candidates</button>
+          <button type="submit" id="submit-button">Find</button>
         </form>
       </section>
 

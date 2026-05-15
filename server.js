@@ -260,10 +260,8 @@ createServer(async (req, res) => {
 async function findPotentialEndorsers(input) {
   const targetCategory = String(input.targetCategory || "").trim();
   const connection = cleanOptional(input.connection);
-  const connectionCategory = cleanOptional(input.connectionCategory);
-  const connectionType = getConnectionTypes(connectionCategory, connection);
-  const institution = cleanOptional(input.institution) || (connectionType.includes("institution") ? connection : null);
-  const piName = cleanOptional(input.piName) || (connectionType.includes("person") ? connection : null);
+  // Connection is always treated as a person (PI / senior collaborator)
+  const piName = connection;
   const maxResults = clamp(Number(input.maxResults || DEFAULT_PAPER_LIMIT), 10, MAX_PAPERS);
   const recentRange = getRecentSubmittedRange(RECENT_YEARS);
 
@@ -273,23 +271,9 @@ async function findPotentialEndorsers(input) {
     throw error;
   }
 
-  const focusedSearch = Boolean(institution || piName);
+  const focusedSearch = Boolean(piName);
   const paperGroups = [];
   let piCoauthors = new Set();
-
-  if (institution) {
-    const institutionQuery = buildCategoryKeywordQuery(targetCategory, institution, recentRange);
-    if (institutionQuery) {
-      paperGroups.push({
-        type: "institution",
-        label: `Institution text match: ${institution}`,
-        papers: await searchArxiv({
-          query: institutionQuery,
-          maxResults
-        })
-      });
-    }
-  }
 
   if (piName) {
     const piAllPapers = await searchArxiv({
@@ -338,7 +322,6 @@ async function findPotentialEndorsers(input) {
     papers,
     paperGroups,
     targetCategory,
-    institution,
     piName,
     piCoauthors
   });
@@ -349,8 +332,7 @@ async function findPotentialEndorsers(input) {
     absUrl: paper.absUrl,
     authors: paper.authors,
     sourceCategory: paper.primaryCategory,
-    publishedAt: paper.publishedAt,
-    institutionEvidence: institution ? getInstitutionEvidence(paper, institution) : ""
+    publishedAt: paper.publishedAt
   }));
 
   return {
@@ -359,19 +341,12 @@ async function findPotentialEndorsers(input) {
     searchStrategy: {
       focusedSearch,
       connection,
-      connectionCategory,
-      connectionType,
-      institution,
       piName,
       groups: paperGroups.map((group) => ({
         label: group.label,
         count: group.papers.length
       })),
-      rawPaperCount: rawPapers.length,
-      institutionEvidenceCount: institution
-        ? rawPapers.filter((paper) => getInstitutionEvidence(paper, institution)).length
-        : 0,
-      institutionFullName: institution
+      rawPaperCount: rawPapers.length
     },
     searchedPaperCount: papers.length,
     searchedPapers,
@@ -448,12 +423,6 @@ async function searchArxivPage({ query, start, maxResults }) {
   return parseArxivFeed(xml);
 }
 
-function buildCategoryKeywordQuery(category, text, recentRange) {
-  const institutionName = cleanOptional(text);
-  if (!institutionName) return "";
-  return [`cat:${category}`, recentRange, `all:"${escapeQuery(institutionName)}"`].join(" AND ");
-}
-
 function buildCategoryAuthorOrQuery(category, authors, recentRange) {
   const authorTerms = authors
     .map((author) => String(author || "").trim())
@@ -464,50 +433,7 @@ function buildCategoryAuthorOrQuery(category, authors, recentRange) {
   return `cat:${category} AND ${recentRange} AND (${authorTerms.join(" OR ")})`;
 }
 
-function classifyConnection(connection) {
-  if (!connection) return [];
-  const normalized = normalizeForMatch(connection);
-  const hasInstitutionWord =
-    /\b(university|college|institute|institution|school|department|laboratory|lab|center|centre|clinic|hospital|academy|corporation|inc|llc|gmbh|ltd)\b/.test(
-      normalized
-    );
-  const words = connection.split(/\s+/).filter(Boolean);
-  const looksLikePersonName =
-    words.length >= 2 &&
-    words.length <= 5 &&
-    words.every((word) => /^[A-Z][A-Za-z'.-]*$/.test(word) || /^[A-Z]\.$/.test(word));
 
-  if (hasInstitutionWord) return ["institution"];
-  if (looksLikePersonName) return ["person"];
-  return ["institution", "person"];
-}
-
-function getConnectionTypes(connectionCategory, connection) {
-  if (connectionCategory === "institution") return connection ? ["institution"] : [];
-  if (connectionCategory === "person") return connection ? ["person"] : [];
-  return classifyConnection(connection);
-}
-
-function getInstitutionEvidence(paper, institution) {
-  const fullName = cleanOptional(institution);
-  if (!fullName) return "";
-  const metadata = [
-    paper.title,
-    paper.summary,
-    paper.comment,
-    paper.journalRef,
-    paper.authors.join(" ")
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const normalizedMetadata = normalizeForMatch(metadata);
-  const normalizedInstitution = normalizeForMatch(fullName);
-
-  if (normalizedInstitution && normalizedMetadata.includes(normalizedInstitution)) {
-    return `arXiv metadata explicitly contains "${fullName}".`;
-  }
-  return "";
-}
 
 async function cachedFetchText(url, namespace) {
   assertAllowedUrl(url);
@@ -607,13 +533,12 @@ async function waitForArxivRateLimit() {
   consecutiveRequests++;
 }
 
-function rankPotentialCandidates({ papers, paperGroups, targetCategory, institution, piName, piCoauthors }) {
+function rankPotentialCandidates({ papers, paperGroups, targetCategory, piName, piCoauthors }) {
   const byName = new Map();
   const paperSignals = buildPaperSignals(paperGroups);
 
   for (const paper of papers) {
     const signals = paperSignals.get(normalizeArxivId(paper.arxivId)) || new Set(["category"]);
-    const institutionEvidence = institution ? getInstitutionEvidence(paper, institution) : "";
     const targetCategoryMatch = paper.categories.includes(targetCategory);
 
     paper.authors.forEach((name, index) => {
@@ -623,8 +548,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         name,
         appearances: [],
         categories: new Set(),
-        signals: new Set(),
-        institutionEvidence: ""
+        signals: new Set()
       };
 
       current.appearances.push({
@@ -636,9 +560,6 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       });
       for (const category of paper.categories) current.categories.add(category);
       for (const signal of signals) current.signals.add(signal);
-      if (!current.institutionEvidence && institutionEvidence) {
-        current.institutionEvidence = institutionEvidence;
-      }
       byName.set(key, current);
     });
   }
@@ -655,20 +576,17 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const categoryScore = exactCategory ? 20 : 0;
       const recentPaperScore = getRecentPaperPointScore(sourcePaper.publishedAt);
       const piScore = piConnection.level === 1 ? 30 : piConnection.level === 2 ? 10 : 0;
-      const institutionScore = candidate.institutionEvidence ? 25 : 0;
       const repeatedActivityScore = Math.max(0, targetAppearances.length - 1) * 10;
       const totalScore =
         categoryScore +
         recentPaperScore +
         authorPositionScore +
         piScore +
-        institutionScore +
         repeatedActivityScore;
 
       const relevance = buildRelevanceReasons({
         candidate,
         targetCategory,
-        institution,
         piConnection,
         exactCategory,
         bestAppearance,
@@ -677,7 +595,6 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
 
       return {
         name: candidate.name,
-        affiliation: inferAffiliation(candidate.institutionEvidence, institution),
         sourcePaper: sourcePaper.arxivId,
         sourceTitle: sourcePaper.title,
         sourceCategory: sourcePaper.primaryCategory,
@@ -691,12 +608,10 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         paperCount: targetAppearances.length || candidate.appearances.length,
         authorRole: getAuthorPositionLabel(bestAppearance.position),
         authorPosition: bestAppearance.position,
-        institutionMatch: candidate.institutionEvidence,
         scores: {
           total: totalScore,
           category: categoryScore,
           piConnection: piScore,
-          institution: institutionScore,
           repeatedActivity: repeatedActivityScore,
           authorPosition: authorPositionScore,
           recentPaper: recentPaperScore
@@ -737,18 +652,13 @@ function pickBestAppearance(appearances, targetCategory) {
   })[0];
 }
 
-function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
+function buildRelevanceReasons({ candidate, targetCategory, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
   const reasons = [];
   if (exactCategory) {
     reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on a recent arXiv paper in ${targetCategory}.`);
   }
   reasons.push("Paper is within the last five years.");
   if (piConnection.text) reasons.push(piConnection.text);
-  if (candidate.institutionEvidence) {
-    reasons.push(candidate.institutionEvidence);
-  } else if (institution) {
-    reasons.push(`Institution full name was used exactly as entered: ${institution}.`);
-  }
   if (targetPaperCount > 1) {
     reasons.push(`${targetPaperCount} recent target-category arXiv papers found.`);
   }
@@ -756,12 +666,6 @@ function buildRelevanceReasons({ candidate, targetCategory, institution, piConne
     reasons.push("Ownership is not confirmed, so this lower author-position signal is discounted.");
   }
   return reasons;
-}
-
-function inferAffiliation(institutionEvidence, institution) {
-  if (institutionEvidence && institution) return `Possible ${institution} connection`;
-  if (institution) return `Institution not confirmed; ${institution} used as a search signal`;
-  return "Not inferred from arXiv metadata";
 }
 
 function getPiConnection(name, piName, piCoauthors) {

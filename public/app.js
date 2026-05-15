@@ -3,10 +3,7 @@ const categoryInput = document.querySelector("#target-category");
 const categoryList = document.querySelector("#category-list");
 const progress = document.querySelector("#progress");
 const results = document.querySelector("#results");
-const summary = document.querySelector("#summary");
 const submitButton = document.querySelector("#submit-button");
-const connectionCategory = document.querySelector("#connection-category");
-const connectionDetail = document.querySelector("#connection-detail");
 const connectionInput = document.querySelector("#connection");
 const rateLimitStatus = document.querySelector("#rate-limit-status");
 const resetRateLimitButton = document.querySelector("#reset-rate-limit");
@@ -15,10 +12,8 @@ let categories = [];
 let rateLimitInterval = null;
 
 loadCategories();
-updateConnectionField();
 startRateLimitMonitor();
 
-connectionCategory.addEventListener("change", updateConnectionField);
 resetRateLimitButton.addEventListener("click", resetRateLimit);
 
 async function startRateLimitMonitor() {
@@ -101,22 +96,7 @@ async function loadCategories() {
   categoryList.innerHTML = categories.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
 }
 
-function updateConnectionField() {
-  const type = connectionCategory.value;
-  const hasType = Boolean(type);
-  connectionDetail.classList.toggle("is-hidden", !hasType);
-  connectionInput.disabled = !hasType;
-  connectionInput.required = hasType;
 
-  if (!hasType) {
-    connectionInput.value = "";
-    connectionInput.placeholder = "Full name";
-    return;
-  }
-
-  connectionInput.placeholder =
-    type === "institution" ? "Full official institution name" : "Full name of PI or senior collaborator";
-}
 
 function renderSummary(data) {
   const focusLabel = data.searchStrategy.focusedSearch ? "Network focused" : "Category only";
