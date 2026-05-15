@@ -355,6 +355,124 @@ function getEstimatedPapersRequired(archive) {
   return estimates[archive] || 3;
 }
 
+// Common institution name mappings and abbreviations
+const INSTITUTION_ALIASES = {
+  "stanford": ["Stanford University", "Stanford", "Stanford CS"],
+  "mit": ["Massachusetts Institute of Technology", "MIT", "CSAIL"],
+  "berkeley": ["UC Berkeley", "University of California, Berkeley", "Berkeley"],
+  "cmu": ["Carnegie Mellon University", "CMU", "Carnegie Mellon"],
+  "harvard": ["Harvard University", "Harvard"],
+  "princeton": ["Princeton University", "Princeton"],
+  "caltech": ["California Institute of Technology", "Caltech"],
+  "cornell": ["Cornell University", "Cornell"],
+  "ucla": ["UCLA", "University of California, Los Angeles"],
+  "ucsd": ["UCSD", "University of California, San Diego"],
+  "uw": ["University of Washington", "UW Seattle"],
+  "gatech": ["Georgia Tech", "Georgia Institute of Technology"],
+  "uiuc": ["UIUC", "University of Illinois at Urbana-Champaign", "University of Illinois"],
+  "umich": ["University of Michigan", "UMich", "Michigan"],
+  "nyu": ["New York University", "NYU"],
+  "columbia": ["Columbia University", "Columbia"],
+  "yale": ["Yale University", "Yale"],
+  "eth": ["ETH Zurich", "ETH", "Swiss Federal Institute of Technology"],
+  "oxford": ["University of Oxford", "Oxford"],
+  "cambridge": ["University of Cambridge", "Cambridge"],
+  "google": ["Google", "Google Research", "Google DeepMind", "DeepMind"],
+  "meta": ["Meta", "Meta AI", "Facebook AI", "FAIR"],
+  "microsoft": ["Microsoft", "Microsoft Research", "MSR"],
+  "openai": ["OpenAI"],
+  "anthropic": ["Anthropic"],
+};
+
+function getInstitutionVariations(institution) {
+  const normalizedInput = institution.toLowerCase().trim();
+  const variations = [institution]; // Always include original
+  
+  // Check if input matches any known alias
+  for (const [key, aliases] of Object.entries(INSTITUTION_ALIASES)) {
+    const allForms = [key, ...aliases.map(a => a.toLowerCase())];
+    if (allForms.some(form => normalizedInput.includes(form) || form.includes(normalizedInput))) {
+      for (const alias of aliases) {
+        if (!variations.includes(alias)) {
+          variations.push(alias);
+        }
+      }
+    }
+  }
+  
+  // If no aliases found, try some heuristics
+  if (variations.length === 1) {
+    // Add "University of X" if just "X" is given
+    if (!normalizedInput.includes("university")) {
+      variations.push(`University of ${institution}`);
+      variations.push(`${institution} University`);
+    }
+  }
+  
+  return variations;
+}
+
+// Find researchers from an institution who publish in a target category
+// Strategy: Search arXiv for papers with institution name in affiliation/abstract,
+// then extract the most frequent authors
+async function findInstitutionResearchers(institution, targetCategory, recentRange, maxResults) {
+  const researchers = [];
+  const authorCounts = new Map();
+  
+  // Generate institution name variations for better matching
+  const institutionVariations = getInstitutionVariations(institution);
+  
+  // Search for papers that mention the institution in the target category
+  // arXiv doesn't have a direct affiliation field, so we search in all text
+  const queries = [];
+  
+  // Add queries for each variation
+  for (const variation of institutionVariations.slice(0, 3)) {
+    queries.push(`cat:${targetCategory} AND all:"${escapeQuery(variation)}" AND ${recentRange}`);
+  }
+  
+  for (const query of queries) {
+    try {
+      const papers = await searchArxiv({
+        query,
+        maxResults: Math.min(maxResults, 150)
+      });
+      
+      // Count author appearances
+      for (const paper of papers) {
+        // Check if this paper is likely from the institution
+        const hasInstitutionEvidence = getInstitutionEvidence(paper, institution);
+        if (hasInstitutionEvidence) {
+          for (const author of paper.authors) {
+            const key = normalizeName(author);
+            if (key) {
+              authorCounts.set(key, (authorCounts.get(key) || 0) + 1);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log(`[Institution Search] Query failed: ${error.message}`);
+    }
+  }
+  
+  // Sort by paper count and get top researchers
+  const sortedAuthors = [...authorCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20);
+  
+  for (const [name, count] of sortedAuthors) {
+    researchers.push(name);
+  }
+  
+  console.log(`[Institution Search] Found ${researchers.length} researchers from ${institution} in ${targetCategory}`);
+  
+  return {
+    researchers,
+    authorCounts: Object.fromEntries(sortedAuthors)
+  };
+}
+
 async function findPotentialEndorsers(input) {
   const targetCategory = String(input.targetCategory || "").trim();
   const connection = cleanOptional(input.connection);
@@ -376,6 +494,26 @@ async function findPotentialEndorsers(input) {
   let piCoauthors = new Set();
 
   if (institution) {
+    // Strategy 1: Search for faculty/researchers from the institution in this category
+    // Use arXiv author search with institution affiliation patterns
+    const institutionFaculty = await findInstitutionResearchers(institution, targetCategory, recentRange, maxResults);
+    
+    if (institutionFaculty.researchers.length > 0) {
+      // Search for papers by these researchers in the target category
+      const facultyQuery = buildCategoryAuthorOrQuery(targetCategory, institutionFaculty.researchers.slice(0, 15), recentRange);
+      if (facultyQuery) {
+        paperGroups.push({
+          type: "institution-faculty",
+          label: `Researchers from ${institution} in ${targetCategory}`,
+          papers: await searchArxiv({
+            query: facultyQuery,
+            maxResults: Math.min(maxResults, 200)
+          })
+        });
+      }
+    }
+    
+    // Strategy 2: Also do text match as fallback
     const institutionQuery = buildCategoryKeywordQuery(targetCategory, institution, recentRange);
     if (institutionQuery) {
       paperGroups.push({
@@ -383,7 +521,7 @@ async function findPotentialEndorsers(input) {
         label: `Institution text match: ${institution}`,
         papers: await searchArxiv({
           query: institutionQuery,
-          maxResults
+          maxResults: Math.min(maxResults, 100)
         })
       });
     }
