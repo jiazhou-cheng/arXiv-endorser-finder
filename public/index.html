@@ -31,20 +31,21 @@
         </div>
 
         <form id="search-form" class="form-grid">
-          <label>
+          <label for="target-category">
             <span>Target category</span>
-            <input
-              id="target-category"
-              name="targetCategory"
-              list="category-list"
-              placeholder="cs.AI"
-              autocomplete="off"
-              required
-            />
-            <datalist id="category-list"></datalist>
+            <div class="category-field">
+              <input
+                id="target-category"
+                name="targetCategory"
+                placeholder="cs.AI"
+                autocomplete="off"
+                required
+              />
+              <div id="category-list" class="category-suggestions hidden" role="listbox"></div>
+            </div>
           </label>
 
-          <label>
+          <label for="max-results">
             <span>Paper budget</span>
             <select id="max-results" name="maxResults">
               <option value="100" selected>100 papers</option>
@@ -54,7 +55,7 @@
             </select>
           </label>
 
-          <label>
+          <label for="connection">
             <span>PI / Senior collaborator <small>optional</small></span>
             <input id="connection" name="connection" placeholder="Full name (e.g. Firstname M. Lastname)" />
           </label>

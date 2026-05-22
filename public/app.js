@@ -1,4 +1,5 @@
 const form = document.querySelector("#search-form");
+const categoryInput = document.querySelector("#target-category");
 const categoryList = document.querySelector("#category-list");
 const progress = document.querySelector("#progress");
 const summary = document.querySelector("#summary");
@@ -12,7 +13,13 @@ let categories = [];
 loadCategories();
 initRateLimitToggle();
 
+categoryInput.addEventListener("input", () => renderCategorySuggestions(categoryInput.value));
+categoryInput.addEventListener("focus", () => renderCategorySuggestions(categoryInput.value));
+categoryInput.addEventListener("keydown", handleCategoryKeydown);
 rateLimitToggle.addEventListener("change", toggleRateLimit);
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".category-field")) hideCategorySuggestions();
+});
 
 async function initRateLimitToggle() {
   try {
@@ -50,10 +57,15 @@ form.addEventListener("submit", async (event) => {
   clearOutput();
 
   const payload = Object.fromEntries(new FormData(form).entries());
-  if (!categories.includes(payload.targetCategory)) {
-    showError("Please choose an exact official arXiv category, for example cs.CV or physics.optics.");
+  const targetCategory = resolveCategoryInput(payload.targetCategory);
+  if (!targetCategory) {
+    showError("Please choose an official arXiv category from the suggestions, for example cs.CV or physics.optics.");
+    renderCategorySuggestions(payload.targetCategory);
     return;
   }
+  payload.targetCategory = targetCategory;
+  categoryInput.value = targetCategory;
+  hideCategorySuggestions();
 
   setLoading(true);
   try {
@@ -77,9 +89,6 @@ async function loadCategories() {
     const response = await fetch("/api/categories");
     const data = await response.json();
     categories = data.categories;
-    categoryList.innerHTML = categories
-      .map((category) => `<option value="${escapeHtml(category)}"></option>`)
-      .join("");
   } catch (error) {
     showError("Could not load arXiv categories. Please refresh the page.");
     console.error("Failed to load categories:", error);
@@ -87,7 +96,6 @@ async function loadCategories() {
 }
 
 function renderSummary(data) {
-  const focusLabel = data.searchStrategy.focusedSearch ? "Network focused" : "Category only";
   summary.classList.remove("hidden");
   summary.innerHTML = `
     <div class="summary-item">
@@ -106,11 +114,103 @@ function renderSummary(data) {
       <span>Candidates</span>
       <b>${data.candidates.length}</b>
     </div>
-    <div class="summary-item">
-      <span>Search mode</span>
-      <b>${escapeHtml(focusLabel)}</b>
-    </div>
   `;
+}
+
+function renderCategorySuggestions(value) {
+  const hasQuery = Boolean(normalizeCategorySearch(value));
+  const matches = getCategoryMatches(value).slice(0, hasQuery ? 8 : categories.length);
+  if (!matches.length) {
+    categoryList.innerHTML = "";
+    hideCategorySuggestions();
+    return;
+  }
+
+  categoryList.innerHTML = matches
+    .map(
+      (category) => `
+        <button class="category-option" type="button" role="option" data-category="${escapeAttribute(category)}">
+          <span>${escapeHtml(category)}</span>
+        </button>
+      `
+    )
+    .join("");
+  categoryList.classList.remove("hidden");
+  categoryList.querySelectorAll(".category-option").forEach((option) => {
+    option.addEventListener("click", () => selectCategory(option.dataset.category));
+  });
+}
+
+function hideCategorySuggestions() {
+  categoryList.classList.add("hidden");
+}
+
+function handleCategoryKeydown(event) {
+  if (event.key === "Escape") {
+    hideCategorySuggestions();
+    return;
+  }
+
+  if (event.key !== "Enter") return;
+  const resolved = resolveCategoryInput(categoryInput.value);
+  if (!resolved) return;
+  event.preventDefault();
+  selectCategory(resolved);
+}
+
+function selectCategory(category) {
+  categoryInput.value = category;
+  hideCategorySuggestions();
+  categoryInput.focus();
+}
+
+function resolveCategoryInput(value) {
+  const trimmed = String(value || "").trim();
+  if (categories.includes(trimmed)) return trimmed;
+
+  const normalized = normalizeCategorySearch(trimmed);
+  if (!normalized) return "";
+
+  const exactCompactMatches = categories.filter(
+    (category) => normalizeCategorySearch(category) === normalized
+  );
+  if (exactCompactMatches.length === 1) return exactCompactMatches[0];
+
+  const matches = getCategoryMatches(trimmed);
+  return matches.length === 1 ? matches[0] : "";
+}
+
+function getCategoryMatches(value) {
+  const normalized = normalizeCategorySearch(value);
+  if (!normalized) return categories;
+
+  return categories
+    .map((category) => ({ category, score: getCategoryMatchScore(category, normalized) }))
+    .filter((match) => match.score < 99)
+    .sort((a, b) => a.score - b.score || a.category.localeCompare(b.category))
+    .map((match) => match.category);
+}
+
+function getCategoryMatchScore(category, normalizedQuery) {
+  const normalizedCategory = normalizeCategorySearch(category);
+  const parts = category.toLowerCase().split(".");
+  const primary = normalizeCategorySearch(parts[0]);
+  const secondary = normalizeCategorySearch(parts[1] || "");
+
+  if (normalizedCategory === normalizedQuery) return 0;
+  if (category.toLowerCase() === normalizedQuery) return 1;
+  if (primary === normalizedQuery || secondary === normalizedQuery) return 2;
+  if (secondary.startsWith(normalizedQuery)) return 3;
+  if (primary.startsWith(normalizedQuery)) return 4;
+  if (normalizedCategory.startsWith(normalizedQuery)) return 5;
+  if (normalizedCategory.includes(normalizedQuery)) return 6;
+  return 99;
+}
+
+function normalizeCategorySearch(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function renderResults(data) {

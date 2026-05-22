@@ -163,6 +163,10 @@ small {
   font-weight: 500;
 }
 
+.category-field {
+  position: relative;
+}
+
 input,
 select,
 button {
@@ -184,6 +188,44 @@ input:focus,
 select:focus {
   border-color: var(--accent);
   outline: 3px solid rgba(15, 118, 110, 0.14);
+}
+
+.category-suggestions {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  display: grid;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 14px 32px rgba(23, 23, 23, 0.12);
+  padding: 6px;
+}
+
+.category-option {
+  display: flex;
+  grid-column: auto;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 10px;
+  text-align: left;
+  font-weight: 700;
+}
+
+.category-option:hover,
+.category-option:focus {
+  background: var(--soft);
+  color: var(--accent-dark);
+  outline: none;
 }
 
 button {
