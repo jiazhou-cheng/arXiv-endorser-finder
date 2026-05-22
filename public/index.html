@@ -49,20 +49,11 @@
           </label>
 
           <label>
-            <span>Connection category <small>optional</small></span>
-            <select id="connection-category" name="connectionCategory">
-              <option value="" selected>Select connection type</option>
-              <option value="person">Person - PI or senior collaborator (recommended)</option>
-              <option value="institution">Institution</option>
-            </select>
+            <span>PI / Senior collaborator <small>optional</small></span>
+            <input id="connection" name="connection" placeholder="Full name (e.g. Jonathan A. Fan)" />
           </label>
 
-          <label id="connection-detail" class="connection-detail is-hidden">
-            <span>Connection full name</span>
-            <input id="connection" name="connection" placeholder="Full name" disabled />
-          </label>
-
-          <button type="submit" id="submit-button">Find candidates</button>
+          <button type="submit" id="submit-button">Find</button>
         </form>
       </section>
 
@@ -70,6 +61,16 @@
         <strong>arXiv validation requires login.</strong>
         <span>Please use the button below to log in to arXiv and manually verify endorsement eligibility.</span>
         <a class="notice-button" href="https://arxiv.org/login" target="_blank" rel="noreferrer">Log in and verify</a>
+      </section>
+
+      <section id="rate-limit-status" class="rate-limit-status" aria-live="polite">
+        <div class="rate-limit-info">
+          <label class="toggle-switch">
+            <input type="checkbox" id="rate-limit-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="rate-limit-text">Rate limiting</span>
+        </div>
       </section>
 
       <section id="progress" class="progress hidden" aria-live="polite">

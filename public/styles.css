@@ -258,6 +258,86 @@ button.secondary {
   display: flex;
 }
 
+.rate-limit-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 13px;
+}
+
+.rate-limit-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rate-limit-text {
+  color: var(--muted);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.2s;
+  border-radius: 22px;
+}
+
+.toggle-slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(18px);
+}
+  color: var(--text);
+}
+
+.reset-button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 .progress p {
   margin: 0;
 }
@@ -413,4 +493,51 @@ button.secondary {
   .result-card {
     padding: 18px;
   }
+}
+
+/* Simplified Candidate Card */
+.candidate-name {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.candidate-tags {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  background: var(--soft);
+  color: var(--text);
+}
+
+.tag-yes {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.tag-no {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+.candidate-links {
+  display: flex;
+  gap: 16px;
+}
+
+.candidate-links a {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.candidate-links a:hover {
+  text-decoration: underline;
 }

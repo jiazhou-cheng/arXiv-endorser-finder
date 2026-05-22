@@ -6,20 +6,25 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT, "public");
-const CACHE_DIR = join(ROOT, ".cache");
+// Use /tmp for cache in serverless environments (Vercel), fallback to local .cache for development
+const CACHE_DIR = process.env.VERCEL ? "/tmp/.cache" : join(ROOT, ".cache");
 const PORT = Number(process.env.PORT || 3000);
 const USER_AGENT =
   "arXivEndorserFinder/0.1 (responsible crawler; contact: local-development)";
 const ARXIV_API = "https://export.arxiv.org/api/query";
 const ARXIV_ORIGIN = "https://arxiv.org";
-const RATE_LIMIT_MS = 3100;
+
+// Simple rate limiting like v1 - just a minimum delay between requests
+const RATE_LIMIT_MS = 3100; // 3.1 seconds between requests when enabled
+
 const API_PAGE_SIZE = 100;
 const DEFAULT_PAPER_LIMIT = 100;
 const MAX_PAPERS = 5000;
 const RECENT_YEARS = 5;
 
+// Rate limiting state
+let rateLimitEnabled = false; // OFF by default
 let lastArxivRequestAt = 0;
-let arxivRateLimitedUntil = 0;
 
 const ARXIV_CATEGORIES = [
   "astro-ph.CO",
@@ -196,6 +201,26 @@ createServer(async (req, res) => {
       return sendJson(res, { categories: ARXIV_CATEGORIES });
     }
 
+    if (req.method === "GET" && url.pathname === "/api/rate-limit") {
+      const status = getRateLimitStatus();
+      return sendJson(res, {
+        ...status,
+        config: {
+          minDelayMs: RATE_LIMIT_CONFIG.minDelayMs,
+          maxDelayMs: RATE_LIMIT_CONFIG.maxDelayMs,
+          burstLimit: RATE_LIMIT_CONFIG.burstLimit,
+          burstCooldownMs: RATE_LIMIT_CONFIG.burstCooldownMs,
+        }
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/rate-limit/toggle") {
+      const payload = await readJson(req);
+      rateLimitEnabled = Boolean(payload.enabled);
+      console.log(`[Rate Limit] Toggled to: ${rateLimitEnabled ? "ON" : "OFF"}`);
+      return sendJson(res, { enabled: rateLimitEnabled });
+    }
+
     if (req.method === "POST" && url.pathname === "/api/search") {
       const payload = await readJson(req);
       const results = await findPotentialEndorsers(payload);
@@ -222,10 +247,8 @@ createServer(async (req, res) => {
 async function findPotentialEndorsers(input) {
   const targetCategory = String(input.targetCategory || "").trim();
   const connection = cleanOptional(input.connection);
-  const connectionCategory = cleanOptional(input.connectionCategory);
-  const connectionType = getConnectionTypes(connectionCategory, connection);
-  const institution = cleanOptional(input.institution) || (connectionType.includes("institution") ? connection : null);
-  const piName = cleanOptional(input.piName) || (connectionType.includes("person") ? connection : null);
+  // Connection is always treated as a person (PI / senior collaborator)
+  const piName = connection;
   const maxResults = clamp(Number(input.maxResults || DEFAULT_PAPER_LIMIT), 10, MAX_PAPERS);
   const recentRange = getRecentSubmittedRange(RECENT_YEARS);
 
@@ -235,23 +258,9 @@ async function findPotentialEndorsers(input) {
     throw error;
   }
 
-  const focusedSearch = Boolean(institution || piName);
+  const focusedSearch = Boolean(piName);
   const paperGroups = [];
   let piCoauthors = new Set();
-
-  if (institution) {
-    const institutionQuery = buildCategoryKeywordQuery(targetCategory, institution, recentRange);
-    if (institutionQuery) {
-      paperGroups.push({
-        type: "institution",
-        label: `Institution text match: ${institution}`,
-        papers: await searchArxiv({
-          query: institutionQuery,
-          maxResults
-        })
-      });
-    }
-  }
 
   if (piName) {
     const piAllPapers = await searchArxiv({
@@ -300,7 +309,6 @@ async function findPotentialEndorsers(input) {
     papers,
     paperGroups,
     targetCategory,
-    institution,
     piName,
     piCoauthors
   });
@@ -311,8 +319,7 @@ async function findPotentialEndorsers(input) {
     absUrl: paper.absUrl,
     authors: paper.authors,
     sourceCategory: paper.primaryCategory,
-    publishedAt: paper.publishedAt,
-    institutionEvidence: institution ? getInstitutionEvidence(paper, institution) : ""
+    publishedAt: paper.publishedAt
   }));
 
   return {
@@ -321,19 +328,12 @@ async function findPotentialEndorsers(input) {
     searchStrategy: {
       focusedSearch,
       connection,
-      connectionCategory,
-      connectionType,
-      institution,
       piName,
       groups: paperGroups.map((group) => ({
         label: group.label,
         count: group.papers.length
       })),
-      rawPaperCount: rawPapers.length,
-      institutionEvidenceCount: institution
-        ? rawPapers.filter((paper) => getInstitutionEvidence(paper, institution)).length
-        : 0,
-      institutionFullName: institution
+      rawPaperCount: rawPapers.length
     },
     searchedPaperCount: papers.length,
     searchedPapers,
@@ -343,8 +343,10 @@ async function findPotentialEndorsers(input) {
   };
 }
 
-function isArxivRateLimited() {
-  return Date.now() < arxivRateLimitedUntil;
+function getRateLimitStatus() {
+  return {
+    enabled: rateLimitEnabled
+  };
 }
 
 async function searchArxiv({ query, maxResults }) {
@@ -370,12 +372,6 @@ async function searchArxivPage({ query, start, maxResults }) {
   return parseArxivFeed(xml);
 }
 
-function buildCategoryKeywordQuery(category, text, recentRange) {
-  const institutionName = cleanOptional(text);
-  if (!institutionName) return "";
-  return [`cat:${category}`, recentRange, `all:"${escapeQuery(institutionName)}"`].join(" AND ");
-}
-
 function buildCategoryAuthorOrQuery(category, authors, recentRange) {
   const authorTerms = authors
     .map((author) => String(author || "").trim())
@@ -386,50 +382,7 @@ function buildCategoryAuthorOrQuery(category, authors, recentRange) {
   return `cat:${category} AND ${recentRange} AND (${authorTerms.join(" OR ")})`;
 }
 
-function classifyConnection(connection) {
-  if (!connection) return [];
-  const normalized = normalizeForMatch(connection);
-  const hasInstitutionWord =
-    /\b(university|college|institute|institution|school|department|laboratory|lab|center|centre|clinic|hospital|academy|corporation|inc|llc|gmbh|ltd)\b/.test(
-      normalized
-    );
-  const words = connection.split(/\s+/).filter(Boolean);
-  const looksLikePersonName =
-    words.length >= 2 &&
-    words.length <= 5 &&
-    words.every((word) => /^[A-Z][A-Za-z'.-]*$/.test(word) || /^[A-Z]\.$/.test(word));
 
-  if (hasInstitutionWord) return ["institution"];
-  if (looksLikePersonName) return ["person"];
-  return ["institution", "person"];
-}
-
-function getConnectionTypes(connectionCategory, connection) {
-  if (connectionCategory === "institution") return connection ? ["institution"] : [];
-  if (connectionCategory === "person") return connection ? ["person"] : [];
-  return classifyConnection(connection);
-}
-
-function getInstitutionEvidence(paper, institution) {
-  const fullName = cleanOptional(institution);
-  if (!fullName) return "";
-  const metadata = [
-    paper.title,
-    paper.summary,
-    paper.comment,
-    paper.journalRef,
-    paper.authors.join(" ")
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const normalizedMetadata = normalizeForMatch(metadata);
-  const normalizedInstitution = normalizeForMatch(fullName);
-
-  if (normalizedInstitution && normalizedMetadata.includes(normalizedInstitution)) {
-    return `arXiv metadata explicitly contains "${fullName}".`;
-  }
-  return "";
-}
 
 async function cachedFetchText(url, namespace) {
   assertAllowedUrl(url);
@@ -443,14 +396,6 @@ async function cachedFetchText(url, namespace) {
   try {
     return await readFile(cachePath, "utf8");
   } catch {
-    if (isArxivRateLimited()) {
-      const error = new Error(
-        "arXiv is rate-limiting requests right now. Please wait a few minutes and try again; cached results will still be reused."
-      );
-      error.statusCode = 429;
-      throw error;
-    }
-
     await waitForArxivRateLimit();
     const response = await fetch(url, {
       headers: {
@@ -459,16 +404,14 @@ async function cachedFetchText(url, namespace) {
       }
     });
     if (!response.ok) {
-      if (response.status === 429) {
-        const error = new Error(
-          "arXiv is rate-limiting requests right now. Please wait a few minutes and try again; cached results will still be reused."
-        );
-        error.statusCode = response.status;
-        error.url = url;
-        error.retryAfter = response.headers.get("retry-after") || "";
-        arxivRateLimitedUntil = Date.now() + getRetryDelayMs(error, 10 * 60 * 1000);
-        throw error;
-      }
+  if (response.status === 429) {
+    const error = new Error(
+      "arXiv is rate-limiting requests right now. Please wait a few minutes and try again; cached results will still be reused."
+    );
+    error.statusCode = response.status;
+    error.url = url;
+    throw error;
+  }
       const error = new Error(`arXiv request failed (${response.status}) for ${url}`);
       error.statusCode = response.status;
       error.url = url;
@@ -480,17 +423,6 @@ async function cachedFetchText(url, namespace) {
   }
 }
 
-function getRetryDelayMs(error, fallbackMs) {
-  const retryAfter = String(error.retryAfter || "").trim();
-  if (/^\d+$/.test(retryAfter)) {
-    return Math.max(Number(retryAfter) * 1000, fallbackMs);
-  }
-  const retryDate = Date.parse(retryAfter);
-  if (Number.isFinite(retryDate)) {
-    return Math.max(retryDate - Date.now(), fallbackMs);
-  }
-  return fallbackMs;
-}
 
 function assertAllowedUrl(url) {
   const parsed = new URL(url);
@@ -502,6 +434,12 @@ function assertAllowedUrl(url) {
 }
 
 async function waitForArxivRateLimit() {
+  // Skip rate limiting if disabled (v1 behavior - no delay)
+  if (!rateLimitEnabled) {
+    return;
+  }
+  
+  // Simple v1-style rate limiting: just wait if needed
   const elapsed = Date.now() - lastArxivRequestAt;
   if (elapsed < RATE_LIMIT_MS) {
     await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
@@ -509,13 +447,12 @@ async function waitForArxivRateLimit() {
   lastArxivRequestAt = Date.now();
 }
 
-function rankPotentialCandidates({ papers, paperGroups, targetCategory, institution, piName, piCoauthors }) {
+function rankPotentialCandidates({ papers, paperGroups, targetCategory, piName, piCoauthors }) {
   const byName = new Map();
   const paperSignals = buildPaperSignals(paperGroups);
 
   for (const paper of papers) {
     const signals = paperSignals.get(normalizeArxivId(paper.arxivId)) || new Set(["category"]);
-    const institutionEvidence = institution ? getInstitutionEvidence(paper, institution) : "";
     const targetCategoryMatch = paper.categories.includes(targetCategory);
 
     paper.authors.forEach((name, index) => {
@@ -525,8 +462,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         name,
         appearances: [],
         categories: new Set(),
-        signals: new Set(),
-        institutionEvidence: ""
+        signals: new Set()
       };
 
       current.appearances.push({
@@ -538,9 +474,6 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       });
       for (const category of paper.categories) current.categories.add(category);
       for (const signal of signals) current.signals.add(signal);
-      if (!current.institutionEvidence && institutionEvidence) {
-        current.institutionEvidence = institutionEvidence;
-      }
       byName.set(key, current);
     });
   }
@@ -557,20 +490,17 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
       const categoryScore = exactCategory ? 20 : 0;
       const recentPaperScore = getRecentPaperPointScore(sourcePaper.publishedAt);
       const piScore = piConnection.level === 1 ? 30 : piConnection.level === 2 ? 10 : 0;
-      const institutionScore = candidate.institutionEvidence ? 25 : 0;
       const repeatedActivityScore = Math.max(0, targetAppearances.length - 1) * 10;
       const totalScore =
         categoryScore +
         recentPaperScore +
         authorPositionScore +
         piScore +
-        institutionScore +
         repeatedActivityScore;
 
       const relevance = buildRelevanceReasons({
         candidate,
         targetCategory,
-        institution,
         piConnection,
         exactCategory,
         bestAppearance,
@@ -579,7 +509,6 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
 
       return {
         name: candidate.name,
-        affiliation: inferAffiliation(candidate.institutionEvidence, institution),
         sourcePaper: sourcePaper.arxivId,
         sourceTitle: sourcePaper.title,
         sourceCategory: sourcePaper.primaryCategory,
@@ -593,12 +522,10 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, institut
         paperCount: targetAppearances.length || candidate.appearances.length,
         authorRole: getAuthorPositionLabel(bestAppearance.position),
         authorPosition: bestAppearance.position,
-        institutionMatch: candidate.institutionEvidence,
         scores: {
           total: totalScore,
           category: categoryScore,
           piConnection: piScore,
-          institution: institutionScore,
           repeatedActivity: repeatedActivityScore,
           authorPosition: authorPositionScore,
           recentPaper: recentPaperScore
@@ -639,18 +566,13 @@ function pickBestAppearance(appearances, targetCategory) {
   })[0];
 }
 
-function buildRelevanceReasons({ candidate, targetCategory, institution, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
+function buildRelevanceReasons({ candidate, targetCategory, piConnection, exactCategory, bestAppearance, targetPaperCount }) {
   const reasons = [];
   if (exactCategory) {
     reasons.push(`${getAuthorPositionEvidence(bestAppearance.position)} on a recent arXiv paper in ${targetCategory}.`);
   }
   reasons.push("Paper is within the last five years.");
   if (piConnection.text) reasons.push(piConnection.text);
-  if (candidate.institutionEvidence) {
-    reasons.push(candidate.institutionEvidence);
-  } else if (institution) {
-    reasons.push(`Institution full name was used exactly as entered: ${institution}.`);
-  }
   if (targetPaperCount > 1) {
     reasons.push(`${targetPaperCount} recent target-category arXiv papers found.`);
   }
@@ -658,12 +580,6 @@ function buildRelevanceReasons({ candidate, targetCategory, institution, piConne
     reasons.push("Ownership is not confirmed, so this lower author-position signal is discounted.");
   }
   return reasons;
-}
-
-function inferAffiliation(institutionEvidence, institution) {
-  if (institutionEvidence && institution) return `Possible ${institution} connection`;
-  if (institution) return `Institution not confirmed; ${institution} used as a search signal`;
-  return "Not inferred from arXiv metadata";
 }
 
 function getPiConnection(name, piName, piCoauthors) {
@@ -757,7 +673,9 @@ function formatArxivDate(date) {
 function parseArxivFeed(xml) {
   return getTagBlocks(xml, "entry").map((entry) => {
     const idUrl = getTag(entry, "id");
-    const arxivId = idUrl.split("/abs/").pop() || idUrl;
+    const rawArxivId = idUrl.split("/abs/").pop() || idUrl;
+    // Remove version suffix (e.g., "2401.12345v1" -> "2401.12345") to always link to latest version
+    const arxivId = rawArxivId.replace(/v\d+$/, "");
     const categories = [...entry.matchAll(/<category[^>]*term=["']([^"']+)["'][^>]*>/gi)].map((m) =>
       decodeHtml(m[1])
     );

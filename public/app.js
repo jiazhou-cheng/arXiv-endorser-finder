@@ -3,18 +3,48 @@ const categoryInput = document.querySelector("#target-category");
 const categoryList = document.querySelector("#category-list");
 const progress = document.querySelector("#progress");
 const results = document.querySelector("#results");
-const summary = document.querySelector("#summary");
 const submitButton = document.querySelector("#submit-button");
-const connectionCategory = document.querySelector("#connection-category");
-const connectionDetail = document.querySelector("#connection-detail");
 const connectionInput = document.querySelector("#connection");
+const rateLimitStatus = document.querySelector("#rate-limit-status");
+const rateLimitToggle = document.querySelector("#rate-limit-toggle");
 
 let categories = [];
 
 loadCategories();
-updateConnectionField();
+initRateLimitToggle();
 
-connectionCategory.addEventListener("change", updateConnectionField);
+rateLimitToggle.addEventListener("change", toggleRateLimit);
+
+async function initRateLimitToggle() {
+  try {
+    const response = await fetch("/api/rate-limit");
+    const data = await response.json();
+    rateLimitToggle.checked = data.enabled;
+    updateRateLimitText(data.enabled);
+  } catch (error) {
+    console.error("Failed to fetch rate limit status:", error);
+  }
+}
+
+function updateRateLimitText(enabled) {
+  const text = rateLimitStatus.querySelector(".rate-limit-text");
+  text.textContent = enabled ? "Rate limiting ON" : "Rate limiting OFF";
+}
+
+async function toggleRateLimit() {
+  try {
+    const enabled = rateLimitToggle.checked;
+    const response = await fetch("/api/rate-limit/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled })
+    });
+    const data = await response.json();
+    updateRateLimitText(data.enabled);
+  } catch (error) {
+    console.error("Failed to toggle rate limit:", error);
+  }
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -35,7 +65,6 @@ form.addEventListener("submit", async (event) => {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Search failed.");
-    renderSummary(data);
     renderResults(data);
   } catch (error) {
     showError(error.message);
@@ -51,22 +80,7 @@ async function loadCategories() {
   categoryList.innerHTML = categories.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
 }
 
-function updateConnectionField() {
-  const type = connectionCategory.value;
-  const hasType = Boolean(type);
-  connectionDetail.classList.toggle("is-hidden", !hasType);
-  connectionInput.disabled = !hasType;
-  connectionInput.required = hasType;
 
-  if (!hasType) {
-    connectionInput.value = "";
-    connectionInput.placeholder = "Full name";
-    return;
-  }
-
-  connectionInput.placeholder =
-    type === "institution" ? "Full official institution name" : "Full name of PI or senior collaborator";
-}
 
 function renderSummary(data) {
   const focusLabel = data.searchStrategy.focusedSearch ? "Network focused" : "Category only";
@@ -97,113 +111,35 @@ function renderSummary(data) {
 
 function renderResults(data) {
   const candidates = data.candidates;
-  const noFocusedPapers = data.searchStrategy.focusedSearch && data.searchedPaperCount === 0;
-  const strategyNotice = data.searchStrategy.focusedSearch ? renderSearchStrategy(data.searchStrategy) : "";
 
   if (!candidates.length) {
     results.innerHTML = `
-      ${strategyNotice}
       <div class="empty">
-        <h3>${noFocusedPapers ? "No focused papers found" : "No potential candidates found"}</h3>
-        <p class="muted">${getEmptyMessage(data, noFocusedPapers)}</p>
+        <h3>No potential candidates found</h3>
+        <p class="muted">Try a larger paper budget or add a PI/collaborator name.</p>
       </div>
     `;
     return;
   }
 
-  results.innerHTML = `
-    ${strategyNotice}
-    <div class="empty">
-      <h3>Manual confirmation required</h3>
-      <p class="muted">${escapeHtml(data.guidance)}</p>
-    </div>
-    ${candidates.map(renderCandidate).join("")}
-  `;
-}
-
-function renderSearchStrategy(strategy) {
-  const institutionLine = strategy.institution
-    ? `
-      <div class="manual-link">
-        <span>${strategy.institutionEvidenceCount} papers</span>
-        <span>Contained the exact institution full name: ${escapeHtml(strategy.institutionFullName)}</span>
-      </div>
-    `
-    : "";
-  return `
-    <div class="empty">
-      <h3>Search strategy</h3>
-      <p class="muted">The app searched recent arXiv API metadata using your connection category and full-name input as ranking signals. It did not log in to arXiv or open endorser-check pages.</p>
-      <div class="manual-links">
-        ${institutionLine}
-        ${strategy.groups
-          .map(
-            (group) => `
-              <div class="manual-link">
-                <span>${group.count} papers</span>
-                <span>${escapeHtml(group.label)}</span>
-              </div>
-            `
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-}
-
-function getEmptyMessage(data, noFocusedPapers) {
-  if (noFocusedPapers) {
-    return "No recent papers matched the focused query. For institutions, enter the full official institution name exactly. For people, enter the full name of a PI or senior collaborator.";
-  }
-  if (data.searchStrategy.focusedSearch) {
-    return "The focused search found papers, but no candidate survived ranking. Try increasing the paper budget or using a full official institution name / full person name.";
-  }
-  return "Try a larger paper budget, add a PI/collaborator, or search a neighboring category.";
+  results.innerHTML = candidates.map(renderCandidate).join("");
 }
 
 function renderCandidate(candidate) {
-  const score = Math.round(candidate.scores.total);
-  const categoryClass = candidate.categoryMatch ? "pill strong" : "pill";
+  const paperCount = candidate.paperCount || 1;
+  const hasConnection = Boolean(candidate.piConnection);
+  const endorserCheckUrl = `https://arxiv.org/auth/show-endorsers/${candidate.sourcePaper}`;
+  
   return `
     <article class="result-card">
-      <div class="result-head">
-        <div>
-          <h3>${escapeHtml(candidate.name)}</h3>
-          <p class="muted">${escapeHtml(candidate.confidence)} · ${escapeHtml(candidate.affiliation)}</p>
-        </div>
-        <div class="score" aria-label="Ranking score">
-          <span>Score</span>
-          <b>${score}</b>
-        </div>
+      <h3 class="candidate-name">${escapeHtml(candidate.name)}</h3>
+      <div class="candidate-tags">
+        <span class="tag">${paperCount} related paper${paperCount === 1 ? "" : "s"}</span>
+        <span class="tag ${hasConnection ? "tag-yes" : "tag-no"}">${hasConnection ? "has connection" : "no connection"}</span>
       </div>
-
-      <div class="meta-row">
-        <span class="${categoryClass}">${candidate.categoryMatch ? "Target category" : "Related category"}</span>
-        <span class="pill">${escapeHtml(candidate.sourceCategory)}</span>
-        <span class="pill">${escapeHtml(candidate.authorRole)}</span>
-        <span class="pill">${candidate.paperCount} recent paper${candidate.paperCount === 1 ? "" : "s"}</span>
-        ${candidate.piConnection ? `<span class="pill strong">PI network</span>` : ""}
-      </div>
-
-      <p>${escapeHtml(candidate.rankingReason)}</p>
-
-      <div class="score-row">
-        <span class="pill">Category ${candidate.scores.category}</span>
-        <span class="pill">PI ${candidate.scores.piConnection}</span>
-        <span class="pill">Institution ${candidate.scores.institution}</span>
-        <span class="pill">Repeated activity ${candidate.scores.repeatedActivity}</span>
-        <span class="pill">Author position ${candidate.scores.authorPosition}</span>
-        <span class="pill">Recent paper ${candidate.scores.recentPaper}</span>
-      </div>
-
-      <div class="evidence">
-        <div><strong>Potential candidate found:</strong> Yes. Ownership is not confirmed.</div>
-        <div><strong>Recent arXiv paper:</strong> ${escapeHtml(candidate.sourcePaper)} · ${escapeHtml(candidate.sourceTitle)}</div>
-        <div><strong>Evidence:</strong> ${escapeHtml(candidate.rankingReason)}</div>
-        <div><strong>Manual check:</strong> ${escapeHtml(candidate.manualCheckInstruction)}</div>
-        <div>
-          <a href="${candidate.abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
-        </div>
+      <div class="candidate-links">
+        <a href="${candidate.abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
+        <a href="${endorserCheckUrl}" target="_blank" rel="noreferrer">Validate endorser</a>
       </div>
     </article>
   `;
@@ -214,9 +150,7 @@ function showError(message) {
 }
 
 function clearOutput() {
-  results.innerHTML = "";
-  summary.innerHTML = "";
-  summary.classList.add("hidden");
+  if (results) results.innerHTML = "";
 }
 
 function setLoading(isLoading) {
