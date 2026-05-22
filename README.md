@@ -1,94 +1,72 @@
 # arXiv Endorser Finder
 
-Find likely arXiv endorsement candidates from recent arXiv metadata. The website is
-designed for researchers who need a practical starting list of people to check.
+A web tool for finding **potential arXiv endorsers** from recent arXiv metadata.
 
-![Home screen](docs/screenshots/01-home.png)
+It helps you search by arXiv category and optionally focus the results around a PI or senior collaborator's coauthor network. The app does **not** automatically verify endorsement eligibility; final validation must be done on arXiv.
 
-## What This Tool Does
+<p align="center">
+  <img src="docs/screenshots/01-home.png" alt="Home screen" width="560">
+</p>
 
-- Searches official arXiv API metadata by target category.
-- Optionally uses a PI or senior collaborator name to find nearby coauthor
-  network candidates.
-- Ranks candidates with simple signals: category activity, author position,
-  repeated recent papers, PI/coauthor connection, and recency.
-- Links each candidate to the source arXiv paper.
-- Provides a shortcut to arXiv's manual "Which authors of this paper are
-  endorsers?" page.
+---
 
-## What It Does Not Do
+## How to Use
 
-- It does not log in to arXiv.
-- It does not automatically verify endorsement eligibility.
-- It does not crawl or batch-access arXiv validation pages.
-- It does not scrape emails, contact candidates, or guarantee endorsement.
+### 1. Enter the target arXiv category
 
-## How To Use
+- `cs.CV`
+- `cs.AI`
+- `physics.optics`
+- `stat.ML`
 
-### 1. Enter A Target Category
+The category must match an official arXiv category code.
 
-Type an official arXiv category code such as `cs.CV`, `cs.AI`,
-`physics.optics`, or `stat.ML`.
+---
 
-The category must match an official arXiv category exactly.
+### 2. Choose a paper budget
 
-### 2. Choose A Paper Budget
+Start with `100 papers` for a quick search.
 
-Pick how many recent papers to search. Start with `100 papers` for a quick
-check. Increase the budget when the category is sparse or you want broader
-coverage.
+Use a larger budget if:
 
-### 3. Add A PI Or Senior Collaborator
+- the category has few results,
+- you want broader coverage,
+- the first search does not return enough useful candidates.
 
-The collaborator field is optional. Add a full name when you want the search to
-focus on people near that research network.
+---
 
-![Filled search form](docs/screenshots/02-search-form.png)
+### 3. Add a PI or senior collaborator
 
-### 4. Review Candidate Results
+This field is optional, but usually very helpful.
 
-Click `Find candidates`. The app returns a ranked list of potential candidates.
-Each card includes:
+<p align="center">
+  <img src="docs/screenshots/02-search-form.png" alt="Filled search form" width="560">
+</p>
+
+---
+
+### 4. Review candidate results
+
+After clicking **Find candidates**, the app shows a ranked list of possible endorsement leads.
+
+Each candidate card includes:
 
 - candidate name,
-- source paper title,
-- number of related papers found,
-- whether the candidate has a PI/coauthor connection,
+- source arXiv paper,
+- number of related papers,
+- PI/coauthor connection signal,
 - author-role signal,
-- `Open arXiv paper`,
-- `Validate endorser`.
+- link to open the paper,
+- link to validate the endorser on arXiv.
 
-![Candidate results](docs/screenshots/03-results.png)
+<p align="center">
+  <img src="docs/screenshots/03-results.png" alt="Candidate results" width="560">
+</p>
 
-### 5. Validate On arXiv
+---
 
-Use `Open arXiv paper` to inspect the source publication.
+## Final Validation
 
-Use `Validate endorser` to open arXiv's manual endorser page for that paper:
+Click **Validate endorser** to open arXiv's manual endorser-check page for the source paper.
 
-```text
-Which authors of this paper are endorsers?
-```
-
-arXiv may ask you to log in before showing the validation page. The final
-eligibility decision happens on arXiv, not inside this app.
-
-## Tips
-
-- Use exact arXiv category names.
-- Try a larger paper budget if results are thin.
-- Add a PI or senior collaborator name when you care about network proximity.
-- Treat results as leads to review, not verified endorsers.
-
-## Development
-
-```bash
-npm start
-```
-
-The server listens on `http://localhost:3000` by default. Set `PORT` to use a
-different port:
-
-```bash
-PORT=3001 npm start
-```
+arXiv will ask you to log in. The final eligibility decision is made by arXiv, not by this app.
