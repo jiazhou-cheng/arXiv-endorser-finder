@@ -1,56 +1,94 @@
-# arXivEndorserFinder
+# arXiv Endorser Finder
 
-A local arXiv potential endorser discovery assistant.
+Find likely arXiv endorsement candidates from recent arXiv metadata. The website is
+designed for researchers who need a practical starting list of people to check.
 
-This version is not an automatic endorser checker. It helps users find likely
-potential endorsers by searching recent arXiv publications in a target category
-through PI/coauthor networks and institution-related metadata signals.
+![Home screen](docs/screenshots/01-home.png)
 
-## Run
+## What This Tool Does
 
-```bash
-npm start
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-## What It Does
-
-- validates exact official arXiv category codes,
-- searches recent metadata through the official arXiv API,
-- uses an optional connection category field: `Institution` or `Person - PI or senior collaborator`,
-- shows a full-name connection input after the user chooses a connection category,
-- requires the full official institution name for institution search,
-- does not expand institution abbreviations, nicknames, or aliases,
-- treats person-like connections as coauthor-network search signals,
-- ranks likely candidates by target-category match, author-position ownership likelihood, repeated recent activity, PI connection, exact institution evidence, and recency,
-- returns one recent arXiv paper link for each candidate.
+- Searches official arXiv API metadata by target category.
+- Optionally uses a PI or senior collaborator name to find nearby coauthor
+  network candidates.
+- Ranks candidates with simple signals: category activity, author position,
+  repeated recent papers, PI/coauthor connection, and recency.
+- Links each candidate to the source arXiv paper.
+- Provides a shortcut to arXiv's manual "Which authors of this paper are
+  endorsers?" page.
 
 ## What It Does Not Do
 
-- no arXiv login,
-- no automatic endorser eligibility check,
-- no crawling of arXiv endorser-check pages,
-- no batch access to `Which authors of this paper are endorsers?`,
-- no arXiv search-page scraping,
-- no PDF, source, or e-print crawling,
-- no hidden email scraping,
-- no automatic contact,
-- no institution abbreviation expansion or fuzzy institution-name projection,
-- no endorsement guarantee.
+- It does not log in to arXiv.
+- It does not automatically verify endorsement eligibility.
+- It does not crawl or batch-access arXiv validation pages.
+- It does not scrape emails, contact candidates, or guarantee endorsement.
 
-## Manual Check Workflow
+## How To Use
 
-For each candidate, open the listed arXiv paper. On the arXiv abstract page,
-manually click:
+### 1. Enter A Target Category
+
+Type an official arXiv category code such as `cs.CV`, `cs.AI`,
+`physics.optics`, or `stat.ML`.
+
+The category must match an official arXiv category exactly.
+
+### 2. Choose A Paper Budget
+
+Pick how many recent papers to search. Start with `100 papers` for a quick
+check. Increase the budget when the category is sparse or you want broader
+coverage.
+
+### 3. Add A PI Or Senior Collaborator
+
+The collaborator field is optional. Add a full name when you want the search to
+focus on people near that research network.
+
+![Filled search form](docs/screenshots/02-search-form.png)
+
+### 4. Review Candidate Results
+
+Click `Find candidates`. The app returns a ranked list of potential candidates.
+Each card includes:
+
+- candidate name,
+- source paper title,
+- number of related papers found,
+- whether the candidate has a PI/coauthor connection,
+- author-role signal,
+- `Open arXiv paper`,
+- `Validate endorser`.
+
+![Candidate results](docs/screenshots/03-results.png)
+
+### 5. Validate On arXiv
+
+Use `Open arXiv paper` to inspect the source publication.
+
+Use `Validate endorser` to open arXiv's manual endorser page for that paper:
 
 ```text
 Which authors of this paper are endorsers?
 ```
 
-arXivEndorserFinder only suggests ranked potential candidates. The final
-endorsement eligibility decision must be confirmed manually by the user.
+arXiv may ask you to log in before showing the validation page. The final
+eligibility decision happens on arXiv, not inside this app.
+
+## Tips
+
+- Use exact arXiv category names.
+- Try a larger paper budget if results are thin.
+- Add a PI or senior collaborator name when you care about network proximity.
+- Treat results as leads to review, not verified endorsers.
+
+## Development
+
+```bash
+npm start
+```
+
+The server listens on `http://localhost:3000` by default. Set `PORT` to use a
+different port:
+
+```bash
+PORT=3001 npm start
+```

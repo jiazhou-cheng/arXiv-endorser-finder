@@ -14,16 +14,14 @@ const USER_AGENT =
 const ARXIV_API = "https://export.arxiv.org/api/query";
 const ARXIV_ORIGIN = "https://arxiv.org";
 
-// Simple rate limiting like v1 - just a minimum delay between requests
-const RATE_LIMIT_MS = 3100; // 3.1 seconds between requests when enabled
+const RATE_LIMIT_MS = 3100;
 
 const API_PAGE_SIZE = 100;
 const DEFAULT_PAPER_LIMIT = 100;
 const MAX_PAPERS = 5000;
 const RECENT_YEARS = 5;
 
-// Rate limiting state
-let rateLimitEnabled = false; // OFF by default
+let rateLimitEnabled = false;
 let lastArxivRequestAt = 0;
 
 const ARXIV_CATEGORIES = [
@@ -202,16 +200,7 @@ createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && url.pathname === "/api/rate-limit") {
-      const status = getRateLimitStatus();
-      return sendJson(res, {
-        ...status,
-        config: {
-          minDelayMs: RATE_LIMIT_CONFIG.minDelayMs,
-          maxDelayMs: RATE_LIMIT_CONFIG.maxDelayMs,
-          burstLimit: RATE_LIMIT_CONFIG.burstLimit,
-          burstCooldownMs: RATE_LIMIT_CONFIG.burstCooldownMs,
-        }
-      });
+      return sendJson(res, getRateLimitStatus());
     }
 
     if (req.method === "POST" && url.pathname === "/api/rate-limit/toggle") {
@@ -339,7 +328,7 @@ async function findPotentialEndorsers(input) {
     searchedPapers,
     candidates,
     guidance:
-      "These are potential endorsers inferred from recent arXiv metadata only. Open a listed arXiv paper yourself and use the arXiv page's manual endorser check link to confirm eligibility."
+      "These are potential candidates inferred from recent arXiv metadata only. Open the listed arXiv paper to review the publication context."
   };
 }
 
@@ -434,12 +423,10 @@ function assertAllowedUrl(url) {
 }
 
 async function waitForArxivRateLimit() {
-  // Skip rate limiting if disabled (v1 behavior - no delay)
   if (!rateLimitEnabled) {
     return;
   }
-  
-  // Simple v1-style rate limiting: just wait if needed
+
   const elapsed = Date.now() - lastArxivRequestAt;
   if (elapsed < RATE_LIMIT_MS) {
     await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS - elapsed));
@@ -530,9 +517,7 @@ function rankPotentialCandidates({ papers, paperGroups, targetCategory, piName, 
           authorPosition: authorPositionScore,
           recentPaper: recentPaperScore
         },
-        rankingReason: relevance.join(" "),
-        manualCheckInstruction:
-          "Ownership cannot be reliably checked without arXiv login. Open this arXiv paper, log in if needed, then use the page-bottom link named \"Which authors of this paper are endorsers?\" to manually confirm eligibility."
+        rankingReason: relevance.join(" ")
       };
     }
     )
@@ -604,7 +589,6 @@ function getAuthorPosition(index, authorCount) {
 
 function getAuthorPositionScore(position) {
   const scores = {
-    confirmedOwner: 100,
     first: 50,
     second: 35,
     third: 25,
@@ -753,16 +737,6 @@ function normalizeName(name) {
     .trim();
 }
 
-function normalizeForMatch(value) {
-  return String(value || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 function cleanOptional(value) {
   const trimmed = String(value || "").trim();
   return trimmed || null;
@@ -775,10 +749,6 @@ function escapeQuery(value) {
 function clamp(value, min, max) {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, value));
-}
-
-function round(value) {
-  return Math.round(value * 100) / 100;
 }
 
 function normalizeSpace(value) {

@@ -16,12 +16,15 @@
             <span>Endorser Finder</span>
           </h1>
         </div>
+        <a class="how-to-link" href="https://github.com/jiazhou-cheng/arXiv-endorser-finder" target="_blank" rel="noreferrer">
+          How to use
+        </a>
       </header>
 
       <section class="search-panel" aria-labelledby="search-title">
         <div class="section-head">
-          <h2 id="search-title">Find likely potential endorsers</h2>
-          <p>Searches recent arXiv API metadata through target categories and academic connection signals.</p>
+          <h2 id="search-title">Find potential endorsers</h2>
+          <p>Searches arXiv API metadata by category and connection.</p>
         </div>
 
         <form id="search-form" class="form-grid">
@@ -31,7 +34,7 @@
               id="target-category"
               name="targetCategory"
               list="category-list"
-              placeholder="cs.CV"
+              placeholder="cs.AI"
               autocomplete="off"
               required
             />
@@ -50,17 +53,11 @@
 
           <label>
             <span>PI / Senior collaborator <small>optional</small></span>
-            <input id="connection" name="connection" placeholder="Full name (e.g. Jonathan A. Fan)" />
+            <input id="connection" name="connection" placeholder="Full name (e.g. Firstname M. Lastname)" />
           </label>
 
-          <button type="submit" id="submit-button">Find</button>
+          <button type="submit" id="submit-button">Find candidates</button>
         </form>
-      </section>
-
-      <section class="notice">
-        <strong>arXiv validation requires login.</strong>
-        <span>Please use the button below to log in to arXiv and manually verify endorsement eligibility.</span>
-        <a class="notice-button" href="https://arxiv.org/login" target="_blank" rel="noreferrer">Log in and verify</a>
       </section>
 
       <section id="rate-limit-status" class="rate-limit-status" aria-live="polite">
@@ -75,7 +72,7 @@
 
       <section id="progress" class="progress hidden" aria-live="polite">
         <div class="spinner"></div>
-        <p>Searching recent arXiv metadata and ranking candidates from PI networks, institution signals, author roles, and category activity.</p>
+        <p>Searching recent arXiv metadata and ranking candidates from PI networks, author roles, and category activity.</p>
       </section>
 
       <section id="summary" class="summary hidden"></section>

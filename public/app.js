@@ -1,10 +1,9 @@
 const form = document.querySelector("#search-form");
-const categoryInput = document.querySelector("#target-category");
 const categoryList = document.querySelector("#category-list");
 const progress = document.querySelector("#progress");
+const summary = document.querySelector("#summary");
 const results = document.querySelector("#results");
 const submitButton = document.querySelector("#submit-button");
-const connectionInput = document.querySelector("#connection");
 const rateLimitStatus = document.querySelector("#rate-limit-status");
 const rateLimitToggle = document.querySelector("#rate-limit-toggle");
 
@@ -74,13 +73,18 @@ form.addEventListener("submit", async (event) => {
 });
 
 async function loadCategories() {
-  const response = await fetch("/api/categories");
-  const data = await response.json();
-  categories = data.categories;
-  categoryList.innerHTML = categories.map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
+  try {
+    const response = await fetch("/api/categories");
+    const data = await response.json();
+    categories = data.categories;
+    categoryList.innerHTML = categories
+      .map((category) => `<option value="${escapeHtml(category)}"></option>`)
+      .join("");
+  } catch (error) {
+    showError("Could not load arXiv categories. Please refresh the page.");
+    console.error("Failed to load categories:", error);
+  }
 }
-
-
 
 function renderSummary(data) {
   const focusLabel = data.searchStrategy.focusedSearch ? "Network focused" : "Category only";
@@ -110,6 +114,8 @@ function renderSummary(data) {
 }
 
 function renderResults(data) {
+  renderSummary(data);
+
   const candidates = data.candidates;
 
   if (!candidates.length) {
@@ -128,18 +134,22 @@ function renderResults(data) {
 function renderCandidate(candidate) {
   const paperCount = candidate.paperCount || 1;
   const hasConnection = Boolean(candidate.piConnection);
-  const endorserCheckUrl = `https://arxiv.org/auth/show-endorsers/${candidate.sourcePaper}`;
-  
+  const abstractUrl = escapeAttribute(candidate.abstractUrl);
+  const endorserUrl = escapeAttribute(`https://arxiv.org/auth/show-endorsers/${candidate.sourcePaper}`);
+  const title = candidate.sourceTitle ? `<p class="candidate-paper">${escapeHtml(candidate.sourceTitle)}</p>` : "";
+
   return `
     <article class="result-card">
       <h3 class="candidate-name">${escapeHtml(candidate.name)}</h3>
+      ${title}
       <div class="candidate-tags">
         <span class="tag">${paperCount} related paper${paperCount === 1 ? "" : "s"}</span>
         <span class="tag ${hasConnection ? "tag-yes" : "tag-no"}">${hasConnection ? "has connection" : "no connection"}</span>
+        <span class="tag">${escapeHtml(candidate.authorRole || "coauthor")}</span>
       </div>
       <div class="candidate-links">
-        <a href="${candidate.abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
-        <a href="${endorserCheckUrl}" target="_blank" rel="noreferrer">Validate endorser</a>
+        <a href="${abstractUrl}" target="_blank" rel="noreferrer">Open arXiv paper</a>
+        <a href="${endorserUrl}" target="_blank" rel="noreferrer">Validate endorser</a>
       </div>
     </article>
   `;
@@ -150,7 +160,9 @@ function showError(message) {
 }
 
 function clearOutput() {
-  if (results) results.innerHTML = "";
+  results.innerHTML = "";
+  summary.innerHTML = "";
+  summary.classList.add("hidden");
 }
 
 function setLoading(isLoading) {
@@ -166,4 +178,8 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, "&#096;");
 }
